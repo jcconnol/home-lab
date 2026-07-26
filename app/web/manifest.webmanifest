@@ -1,0 +1,18 @@
+{
+  "name": "G.R.A.C.E. Home Lab",
+  "short_name": "G.R.A.C.E.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#081018",
+  "theme_color": "#0d1720",
+  "description": "Local dashboard for G.R.A.C.E. Home Lab.",
+  "icons": [
+    {
+      "src": "/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

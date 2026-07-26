@@ -23,6 +23,31 @@ def dashboard() -> FileResponse:
     return FileResponse(WEB / "index.html")
 
 
+@app.get("/manifest.webmanifest")
+def manifest() -> FileResponse:
+    return FileResponse(WEB / "manifest.webmanifest", media_type="application/manifest+json")
+
+
+@app.get("/sw.js")
+def service_worker() -> FileResponse:
+    return FileResponse(WEB / "sw.js", media_type="application/javascript")
+
+
+@app.get("/workflow.md")
+def workflow_doc() -> FileResponse:
+    return FileResponse(WEB / "workflow.md", media_type="text/markdown")
+
+
+@app.get("/johns_todo.md")
+def johns_todo_doc() -> FileResponse:
+    return FileResponse(WEB / "johns_todo.md", media_type="text/markdown")
+
+
+@app.get("/icon.svg")
+def icon() -> FileResponse:
+    return FileResponse(WEB / "icon.svg", media_type="image/svg+xml")
+
+
 @app.get("/api/status")
 def status() -> dict:
     return {"name": settings.name, "expansion": settings.expansion, **state.snapshot()}

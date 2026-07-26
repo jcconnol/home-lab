@@ -3,27 +3,542 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#0d1720" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <link rel="icon" href="/icon.svg" type="image/svg+xml" />
     <title>G.R.A.C.E. Home Lab</title>
     <style>
-      body { font: 16px system-ui, sans-serif; max-width: 900px; margin: 2rem auto; padding: 0 1rem; background: #10151a; color: #e8f0f2; }
-      main { display: grid; gap: 1rem; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); }
-      section { border: 1px solid #31434a; border-radius: 10px; padding: 1rem; background: #172127; }
-      button, input { font: inherit; padding: .6rem; border-radius: 6px; border: 1px solid #526a73; }
-      button { cursor: pointer; background: #9ee7d5; color: #10201e; } input { width: 65%; background: #0d1215; color: white; }
-      li { margin: .4rem 0; } small { color: #9bb0b6; }
+      :root {
+        color-scheme: dark;
+        --bg: #081018;
+        --panel: rgba(14, 24, 33, 0.9);
+        --panel-2: rgba(19, 31, 42, 0.96);
+        --line: rgba(153, 189, 205, 0.18);
+        --text: #ecf5f7;
+        --muted: #9cb4be;
+        --accent: #7fe0c3;
+        --accent-2: #86b7ff;
+        --warn: #ffd27a;
+        --shadow: 0 20px 50px rgba(0, 0, 0, 0.35);
+      }
+
+      * { box-sizing: border-box; }
+      html, body { min-height: 100%; }
+      body {
+        margin: 0;
+        font: 16px/1.5 system-ui, sans-serif;
+        color: var(--text);
+        background:
+          radial-gradient(circle at top, rgba(127, 224, 195, 0.12), transparent 32%),
+          radial-gradient(circle at right, rgba(134, 183, 255, 0.12), transparent 28%),
+          linear-gradient(180deg, #061018 0%, #08131b 100%);
+      }
+
+      .shell {
+        width: min(1180px, calc(100% - 1.5rem));
+        margin: 0 auto;
+        padding: 1rem 0 2rem;
+      }
+
+      header {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 1rem;
+        align-items: end;
+        justify-content: space-between;
+        padding: 1rem 0 1.25rem;
+      }
+
+      h1 {
+        margin: 0;
+        font-size: clamp(2rem, 5vw, 3.5rem);
+        line-height: 1;
+        letter-spacing: 0.03em;
+      }
+
+      .subtitle {
+        margin: 0.4rem 0 0;
+        max-width: 70ch;
+        color: var(--muted);
+      }
+
+      .actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.75rem;
+      }
+
+      button, .button-link, input, textarea {
+        font: inherit;
+      }
+
+      button, .button-link {
+        border: 1px solid var(--line);
+        border-radius: 999px;
+        padding: 0.75rem 1rem;
+        color: var(--text);
+        background: rgba(255, 255, 255, 0.04);
+        cursor: pointer;
+        text-decoration: none;
+      }
+
+      button.primary {
+        background: linear-gradient(135deg, var(--accent), #9ff0d5);
+        color: #092018;
+        border-color: transparent;
+      }
+
+      button:disabled {
+        opacity: 0.55;
+        cursor: not-allowed;
+      }
+
+      .status-strip {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+        gap: 0.75rem;
+        margin: 0 0 1rem;
+      }
+
+      .pill {
+        border: 1px solid var(--line);
+        border-radius: 16px;
+        padding: 0.9rem 1rem;
+        background: rgba(255, 255, 255, 0.03);
+        box-shadow: var(--shadow);
+      }
+
+      .pill strong {
+        display: block;
+        margin-bottom: 0.2rem;
+      }
+
+      .tabs {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.5rem;
+        margin: 0 0 1rem;
+      }
+
+      .tabs button[aria-selected="true"] {
+        background: var(--accent-2);
+        color: #05111d;
+        border-color: transparent;
+      }
+
+      main {
+        display: grid;
+        gap: 1rem;
+        grid-template-columns: minmax(0, 1.1fr) minmax(0, 0.9fr);
+        align-items: start;
+      }
+
+      .stack {
+        display: grid;
+        gap: 1rem;
+      }
+
+      section, .panel {
+        border: 1px solid var(--line);
+        border-radius: 20px;
+        background: linear-gradient(180deg, var(--panel), var(--panel-2));
+        box-shadow: var(--shadow);
+      }
+
+      .panel {
+        padding: 1rem;
+      }
+
+      .panel h2, .panel h3 {
+        margin-top: 0;
+      }
+
+      .panel-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 1rem;
+        margin-bottom: 0.75rem;
+      }
+
+      .panel-body {
+        color: var(--text);
+      }
+
+      .grid-2 {
+        display: grid;
+        gap: 1rem;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+
+      ul {
+        padding-left: 1.2rem;
+        margin: 0;
+      }
+
+      li + li {
+        margin-top: 0.5rem;
+      }
+
+      small, .muted {
+        color: var(--muted);
+      }
+
+      .assistant-form {
+        display: flex;
+        gap: 0.75rem;
+      }
+
+      input, textarea {
+        width: 100%;
+        border-radius: 14px;
+        border: 1px solid var(--line);
+        background: rgba(2, 11, 17, 0.85);
+        color: var(--text);
+        padding: 0.85rem 1rem;
+      }
+
+      textarea {
+        min-height: 8rem;
+        resize: vertical;
+      }
+
+      .doc-toolbar {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.5rem;
+        margin-bottom: 0.75rem;
+      }
+
+      .doc {
+        border: 1px solid var(--line);
+        border-radius: 16px;
+        padding: 1rem;
+        background: rgba(0, 0, 0, 0.18);
+        min-height: 22rem;
+        overflow: auto;
+      }
+
+      .doc h1, .doc h2, .doc h3 {
+        line-height: 1.2;
+      }
+
+      .doc pre {
+        white-space: pre-wrap;
+        margin: 0;
+        font: inherit;
+      }
+
+      .doc p {
+        margin: 0 0 0.85rem;
+      }
+
+      .doc ul, .doc ol {
+        margin: 0 0 0.85rem 1.25rem;
+      }
+
+      .doc hr {
+        border: 0;
+        border-top: 1px solid var(--line);
+        margin: 1rem 0;
+      }
+
+      .event-list {
+        display: grid;
+        gap: 0.75rem;
+      }
+
+      .event-item {
+        border: 1px solid var(--line);
+        border-radius: 14px;
+        background: rgba(255, 255, 255, 0.03);
+        padding: 0.75rem 0.85rem;
+      }
+
+      .event-item strong {
+        display: block;
+        margin-bottom: 0.15rem;
+      }
+
+      .hidden {
+        display: none !important;
+      }
+
+      @media (max-width: 900px) {
+        main, .grid-2 {
+          grid-template-columns: 1fr;
+        }
+
+        .assistant-form {
+          flex-direction: column;
+        }
+      }
     </style>
   </head>
   <body>
-    <h1 id="name">G.R.A.C.E.</h1><p id="expansion"></p>
-    <main>
-      <section><h2>Scene</h2><button onclick="detect()">Detect now</button><ul id="objects"></ul></section>
-      <section><h2>Assistant</h2><form onsubmit="chat(event)"><input id="message" placeholder="/what-do-you-see" /><button>Send</button></form><p id="answer"></p></section>
-      <section><h2>Recent events</h2><ul id="events"></ul></section>
-    </main>
+    <div class="shell">
+      <header>
+        <div>
+          <h1 id="name">G.R.A.C.E.</h1>
+          <p class="subtitle" id="expansion"></p>
+        </div>
+        <div class="actions">
+          <button class="primary" id="installButton" type="button" hidden>Install app</button>
+          <a class="button-link" href="/workflow.md" download>Download workflow</a>
+          <a class="button-link" href="/johns_todo.md" download>Download JOHNS_TODO</a>
+        </div>
+      </header>
+
+      <div class="status-strip">
+        <div class="pill">
+          <strong>Access</strong>
+          <span class="muted">Use this phone-friendly dashboard on the local network.</span>
+        </div>
+        <div class="pill">
+          <strong>Workflow doc</strong>
+          <span class="muted">Shows the build loop and per-feature implementation path.</span>
+        </div>
+        <div class="pill">
+          <strong>Handoff</strong>
+          <span class="muted">Open JOHNS_TODO when a feature needs an account, key, or hardware.</span>
+        </div>
+      </div>
+
+      <nav class="tabs" aria-label="Dashboard sections">
+        <button type="button" data-tab="overview" aria-selected="true">Overview</button>
+        <button type="button" data-tab="workflow" aria-selected="false">Workflow</button>
+        <button type="button" data-tab="todo" aria-selected="false">JOHNS_TODO</button>
+      </nav>
+
+      <main>
+        <div class="stack">
+          <section class="panel tab-panel" data-panel="overview">
+            <div class="panel-header">
+              <h2>Overview</h2>
+              <button class="primary" type="button" onclick="detect()">Detect now</button>
+            </div>
+            <div class="grid-2">
+              <div>
+                <h3>Scene</h3>
+                <ul id="objects"></ul>
+              </div>
+              <div>
+                <h3>Recent events</h3>
+                <div class="event-list" id="events"></div>
+              </div>
+            </div>
+          </section>
+
+          <section class="panel tab-panel" data-panel="overview">
+            <div class="panel-header">
+              <h2>Assistant</h2>
+            </div>
+            <form class="assistant-form" onsubmit="chat(event)">
+              <input id="message" placeholder="/what-do-you-see" autocomplete="off" />
+              <button class="primary" type="submit">Send</button>
+            </form>
+            <p id="answer" class="muted"></p>
+          </section>
+        </div>
+
+        <section class="panel tab-panel hidden" data-panel="workflow">
+          <div class="panel-header">
+            <h2>Workflow</h2>
+            <div class="doc-toolbar">
+              <button type="button" onclick="loadDoc('/workflow.md', 'workflow')">Reload</button>
+              <a class="button-link" href="/workflow.md" download>Download</a>
+            </div>
+          </div>
+          <div class="doc" id="workflowDoc"></div>
+        </section>
+
+        <section class="panel tab-panel hidden" data-panel="todo">
+          <div class="panel-header">
+            <h2>JOHNS_TODO</h2>
+            <div class="doc-toolbar">
+              <button type="button" onclick="loadDoc('/johns_todo.md', 'todo')">Reload</button>
+              <a class="button-link" href="/johns_todo.md" download>Download</a>
+            </div>
+          </div>
+          <div class="doc" id="todoDoc"></div>
+        </section>
+      </main>
+    </div>
+
     <script>
-      async function load() { const s = await (await fetch('/api/status')).json(); name.textContent=s.name; expansion.textContent=s.expansion; objects.innerHTML=s.current_objects.map(o=>`<li>${o.label} <small>${o.confidence}</small></li>`).join('')||'<li>Nothing detected</li>'; events.innerHTML=s.recent_events.slice().reverse().map(e=>`<li>${e.message}<br><small>${e.timestamp}</small></li>`).join('')||'<li>No events yet</li>'; }
-      async function detect() { await fetch('/api/detect',{method:'POST'}); load(); }
-      async function chat(e) { e.preventDefault(); const message=document.getElementById('message').value; const r=await (await fetch('/api/chat',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({message})})).json(); answer.textContent=r.answer||r.error; load(); }
+      const tabButtons = [...document.querySelectorAll('[data-tab]')];
+      const panels = [...document.querySelectorAll('[data-panel]')];
+      const workflowDoc = document.getElementById('workflowDoc');
+      const todoDoc = document.getElementById('todoDoc');
+      const installButton = document.getElementById('installButton');
+      let installPrompt = null;
+
+      function escapeHtml(value) {
+        return value
+          .replace(/&/g, '&amp;')
+          .replace(/</g, '&lt;')
+          .replace(/>/g, '&gt;')
+          .replace(/"/g, '&quot;')
+          .replace(/'/g, '&#39;');
+      }
+
+      function markdownToHtml(markdown) {
+        const lines = markdown.replace(/\r\n/g, '\n').split('\n');
+        const blocks = [];
+        let listMode = null;
+
+        function closeList() {
+          if (listMode === 'ul') {
+            blocks.push('</ul>');
+          } else if (listMode === 'ol') {
+            blocks.push('</ol>');
+          }
+          listMode = null;
+        }
+
+        for (const rawLine of lines) {
+          const line = rawLine.trimEnd();
+          if (!line.trim()) {
+            closeList();
+            continue;
+          }
+
+          if (line.startsWith('### ')) {
+            closeList();
+            blocks.push(`<h3>${escapeHtml(line.slice(4))}</h3>`);
+            continue;
+          }
+
+          if (line.startsWith('## ')) {
+            closeList();
+            blocks.push(`<h2>${escapeHtml(line.slice(3))}</h2>`);
+            continue;
+          }
+
+          if (line.startsWith('# ')) {
+            closeList();
+            blocks.push(`<h1>${escapeHtml(line.slice(2))}</h1>`);
+            continue;
+          }
+
+          if (line.startsWith('- ')) {
+            if (listMode !== 'ul') {
+              closeList();
+              blocks.push('<ul>');
+              listMode = 'ul';
+            }
+            blocks.push(`<li>${escapeHtml(line.slice(2))}</li>`);
+            continue;
+          }
+
+          const ordered = line.match(/^\d+\.\s+(.*)$/);
+          if (ordered) {
+            if (listMode !== 'ol') {
+              closeList();
+              blocks.push('<ol>');
+              listMode = 'ol';
+            }
+            blocks.push(`<li>${escapeHtml(ordered[1])}</li>`);
+            continue;
+          }
+
+          closeList();
+          blocks.push(`<p>${escapeHtml(line)}</p>`);
+        }
+
+        closeList();
+        return blocks.join('');
+      }
+
+      function setTab(name) {
+        tabButtons.forEach((button) => {
+          const selected = button.dataset.tab === name;
+          button.setAttribute('aria-selected', String(selected));
+        });
+        panels.forEach((panel) => {
+          const visible = panel.dataset.panel === 'overview'
+            ? name === 'overview'
+            : panel.dataset.panel === name;
+          panel.classList.toggle('hidden', !visible);
+        });
+      }
+
+      async function load() {
+        const response = await fetch('/api/status');
+        const status = await response.json();
+        document.getElementById('name').textContent = status.name;
+        document.getElementById('expansion').textContent = status.expansion;
+
+        const objects = document.getElementById('objects');
+        objects.innerHTML = status.current_objects.length
+          ? status.current_objects.map((item) => `<li>${escapeHtml(item.label)} <small>${escapeHtml(String(item.confidence))}</small></li>`).join('')
+          : '<li class="muted">Nothing detected</li>';
+
+        const events = document.getElementById('events');
+        events.innerHTML = status.recent_events.length
+          ? status.recent_events.slice().reverse().map((event) => (
+              `<div class="event-item"><strong>${escapeHtml(event.message)}</strong><small>${escapeHtml(event.timestamp)}</small></div>`
+            )).join('')
+          : '<div class="event-item muted">No events yet</div>';
+      }
+
+      async function detect() {
+        await fetch('/api/detect', { method: 'POST' });
+        await load();
+      }
+
+      async function chat(event) {
+        event.preventDefault();
+        const message = document.getElementById('message').value;
+        const response = await fetch('/api/chat', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ message }),
+        });
+        const result = await response.json();
+        document.getElementById('answer').textContent = result.answer || result.error || '';
+        await load();
+      }
+
+      async function loadDoc(url, target) {
+        const response = await fetch(url);
+        const markdown = await response.text();
+        const html = markdownToHtml(markdown);
+        if (target === 'workflow') {
+          workflowDoc.innerHTML = html;
+        } else {
+          todoDoc.innerHTML = html;
+        }
+      }
+
+      tabButtons.forEach((button) => {
+        button.addEventListener('click', () => setTab(button.dataset.tab));
+      });
+
+      if ('serviceWorker' in navigator) {
+        navigator.serviceWorker.register('/sw.js');
+      }
+
+      window.addEventListener('beforeinstallprompt', (event) => {
+        event.preventDefault();
+        installPrompt = event;
+        installButton.hidden = false;
+      });
+
+      installButton.addEventListener('click', async () => {
+        if (!installPrompt) {
+          return;
+        }
+        installPrompt.prompt();
+        await installPrompt.userChoice;
+        installPrompt = null;
+        installButton.hidden = true;
+      });
+
+      loadDoc('/workflow.md', 'workflow');
+      loadDoc('/johns_todo.md', 'todo');
       load();
     </script>
   </body>

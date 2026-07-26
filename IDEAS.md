@@ -2,6 +2,42 @@
 
 This file is a living list of future capabilities. Ideas should be promoted into a dated specification only when the hardware, safety model, and privacy boundaries are clear.
 
+## Difficulty-ranked backlog
+
+The ideas below remain grouped by domain for readability. This ranking orders every idea from easiest to most difficult based on the effort to deliver a safe, private, reliable home-lab version (not merely a prototype).
+
+### Level 1 — Easy
+
+1. **Personality** — prompt and preference configuration; no hardware or external service is required.
+2. **Weather integration** — a bounded, read-only API integration with local caching.
+
+### Level 2 — Moderate
+
+3. **Music playback** — speaker/service integration and command handling.
+4. **Morning and afternoon briefings** — scheduling plus composition from existing data sources.
+5. **Personal memory and preferences** — local persistence, user controls, and retention/export features.
+6. **Tony Stark-inspired command center** — substantial dashboard work, but it can build on existing local data.
+7. **Network awareness** — device discovery, telemetry collection, storage, and privacy-respecting reporting.
+
+### Level 3 — Challenging
+
+8. **Always-listening keyword** — continuous local audio processing, clear microphone state, and mute controls.
+9. **Garmin activity integration** — third-party data access, local health-data handling, and explainable recommendations.
+10. **Automated cat feeder** — physical-device integration with durable scheduling, limits, sensing, and failure alerts.
+
+### Level 4 — Hard
+
+11. **Private personal phone app** — a secure mobile client, push/voice features, and remote access.
+12. **Voice identity guardrail** — speaker verification plus reliable second-factor and permission workflows.
+13. **Wrist tool** — companion-device or custom-hardware integration with audio, display, battery, and controls.
+14. **Remote manual drone control** — secure remote control, video, loss-of-connection failsafes, and physical safety.
+
+### Level 5 — Very hard
+
+15. **3D-printed camera glasses** — comfortable custom hardware, camera/phone integration, and privacy indicators.
+16. **Controlled self-improvement** — sandboxing, approval gates, testing, secure rollback, and strict safety boundaries.
+17. **Autonomous indoor drone** — indoor localization, obstacle avoidance, docking, reliable autonomy, and high safety risk.
+
 ## Home presence and robotics
 
 ### Autonomous indoor drone
