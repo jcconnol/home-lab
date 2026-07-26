@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>G.R.A.C.E. Home Lab</title>
+    <style>
+      body { font: 16px system-ui, sans-serif; max-width: 900px; margin: 2rem auto; padding: 0 1rem; background: #10151a; color: #e8f0f2; }
+      main { display: grid; gap: 1rem; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); }
+      section { border: 1px solid #31434a; border-radius: 10px; padding: 1rem; background: #172127; }
+      button, input { font: inherit; padding: .6rem; border-radius: 6px; border: 1px solid #526a73; }
+      button { cursor: pointer; background: #9ee7d5; color: #10201e; } input { width: 65%; background: #0d1215; color: white; }
+      li { margin: .4rem 0; } small { color: #9bb0b6; }
+    </style>
+  </head>
+  <body>
+    <h1 id="name">G.R.A.C.E.</h1><p id="expansion"></p>
+    <main>
+      <section><h2>Scene</h2><button onclick="detect()">Detect now</button><ul id="objects"></ul></section>
+      <section><h2>Assistant</h2><form onsubmit="chat(event)"><input id="message" placeholder="/what-do-you-see" /><button>Send</button></form><p id="answer"></p></section>
+      <section><h2>Recent events</h2><ul id="events"></ul></section>
+    </main>
+    <script>
+      async function load() { const s = await (await fetch('/api/status')).json(); name.textContent=s.name; expansion.textContent=s.expansion; objects.innerHTML=s.current_objects.map(o=>`<li>${o.label} <small>${o.confidence}</small></li>`).join('')||'<li>Nothing detected</li>'; events.innerHTML=s.recent_events.slice().reverse().map(e=>`<li>${e.message}<br><small>${e.timestamp}</small></li>`).join('')||'<li>No events yet</li>'; }
+      async function detect() { await fetch('/api/detect',{method:'POST'}); load(); }
+      async function chat(e) { e.preventDefault(); const message=document.getElementById('message').value; const r=await (await fetch('/api/chat',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({message})})).json(); answer.textContent=r.answer||r.error; load(); }
+      load();
+    </script>
+  </body>
+</html>
