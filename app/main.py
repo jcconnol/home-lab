@@ -43,6 +43,11 @@ def johns_todo_doc() -> FileResponse:
     return FileResponse(WEB / "johns_todo.md", media_type="text/markdown")
 
 
+@app.get("/backup_inventory.md")
+def backup_inventory_doc() -> FileResponse:
+    return FileResponse(WEB.parent.parent / "D_DRIVE_BACKUP_INVENTORY.md", media_type="text/markdown")
+
+
 @app.get("/icon.svg")
 def icon() -> FileResponse:
     return FileResponse(WEB / "icon.svg", media_type="image/svg+xml")

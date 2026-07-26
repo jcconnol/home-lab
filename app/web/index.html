@@ -288,6 +288,7 @@
           <button class="primary" id="installButton" type="button" hidden>Install app</button>
           <a class="button-link" href="/workflow.md" download>Download workflow</a>
           <a class="button-link" href="/johns_todo.md" download>Download JOHNS_TODO</a>
+          <a class="button-link" href="/backup_inventory.md" download>Download backup inventory</a>
         </div>
       </header>
 
@@ -310,6 +311,7 @@
         <button type="button" data-tab="overview" aria-selected="true">Overview</button>
         <button type="button" data-tab="workflow" aria-selected="false">Workflow</button>
         <button type="button" data-tab="todo" aria-selected="false">JOHNS_TODO</button>
+        <button type="button" data-tab="backup" aria-selected="false">Backup inventory</button>
       </nav>
 
       <main>
@@ -364,6 +366,17 @@
           </div>
           <div class="doc" id="todoDoc"></div>
         </section>
+
+        <section class="panel tab-panel hidden" data-panel="backup">
+          <div class="panel-header">
+            <h2>D: Backup inventory</h2>
+            <div class="doc-toolbar">
+              <button type="button" onclick="loadDoc('/backup_inventory.md', 'backup')">Reload</button>
+              <a class="button-link" href="/backup_inventory.md" download>Download</a>
+            </div>
+          </div>
+          <div class="doc" id="backupDoc"></div>
+        </section>
       </main>
     </div>
 
@@ -372,6 +385,7 @@
       const panels = [...document.querySelectorAll('[data-panel]')];
       const workflowDoc = document.getElementById('workflowDoc');
       const todoDoc = document.getElementById('todoDoc');
+      const backupDoc = document.getElementById('backupDoc');
       const installButton = document.getElementById('installButton');
       let installPrompt = null;
 
@@ -508,8 +522,10 @@
         const html = markdownToHtml(markdown);
         if (target === 'workflow') {
           workflowDoc.innerHTML = html;
-        } else {
+        } else if (target === 'todo') {
           todoDoc.innerHTML = html;
+        } else {
+          backupDoc.innerHTML = html;
         }
       }
 
@@ -539,6 +555,7 @@
 
       loadDoc('/workflow.md', 'workflow');
       loadDoc('/johns_todo.md', 'todo');
+      loadDoc('/backup_inventory.md', 'backup');
       load();
     </script>
   </body>
