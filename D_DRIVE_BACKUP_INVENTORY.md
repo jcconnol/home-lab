@@ -32,14 +32,6 @@ Keep the `.env` only on the private external backup. Do not commit or push it to
 
 Copy the folders even when they appear empty so the personal-media locations are preserved.
 
-### Other personal projects (optional)
-
-- [ ] `D:\Jon\Blender` — Blender projects/assets
-- [ ] `D:\Jon\Unity` — Unity projects/configuration
-- [ ] `D:\Jon\Unity Hub` — Unity Hub data
-
-Only select these if you still want those projects. They are not required for the current GRACE project.
-
 ## Explicitly do not back up
 
 - `D:\Jon\Documents\huggingface_cache` (AI models can be redownloaded)
@@ -67,10 +59,6 @@ F:\Moving Desktop Backup\
 │   ├── Music\
 │   ├── Pictures\
 │   └── Videos\
-└── Optional Projects\
-    ├── Blender\
-    ├── Unity\
-    └── Unity Hub\
 ```
 
 ## Final checks
