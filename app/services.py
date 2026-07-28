@@ -1,4 +1,5 @@
 import time
+import re
 from typing import Any
 
 import httpx
@@ -31,6 +32,10 @@ _WEATHER_CODES = {
     96: "thunderstorm with hail",
     99: "thunderstorm with heavy hail",
 }
+
+
+def _without_emojis(text: str) -> str:
+    return re.sub(r"[\U0001F000-\U0001FAFF\u2600-\u27BF]", "", text).strip()
 
 
 def detect_once(state: LabState) -> str:
@@ -78,7 +83,7 @@ async def ask_ollama(prompt: str, scene: dict) -> str:
         async with httpx.AsyncClient(timeout=60) as client:
             response = await client.post(f"{settings.ollama_url}/api/generate", json=payload)
             response.raise_for_status()
-            return response.json().get("response", "Ollama returned no response.").strip()
+            return _without_emojis(response.json().get("response", "Ollama returned no response."))
     except (httpx.HTTPError, ValueError):
         return "The local language model is unavailable. Start Ollama or use the scene endpoints."
 

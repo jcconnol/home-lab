@@ -1,4 +1,4 @@
-const CACHE_NAME = 'grace-home-lab-v2';
+const CACHE_NAME = 'grace-home-lab-v3';
 const SHELL_ASSETS = [
   '/',
   '/manifest.webmanifest',
