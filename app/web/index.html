@@ -331,6 +331,13 @@
                 <div class="event-list" id="events"></div>
               </div>
             </div>
+            <div class="weather-card">
+              <div class="panel-header">
+                <h3>Weather</h3>
+                <button type="button" onclick="loadWeather(true)">Refresh</button>
+              </div>
+              <p id="weather" class="muted">Loading weather…</p>
+            </div>
           </section>
 
           <section class="panel tab-panel" data-panel="overview">
@@ -496,6 +503,19 @@
               `<div class="event-item"><strong>${escapeHtml(event.message)}</strong><small>${escapeHtml(event.timestamp)}</small></div>`
             )).join('')
           : '<div class="event-item muted">No events yet</div>';
+        await loadWeather();
+      }
+
+      async function loadWeather(forceRefresh = false) {
+        const suffix = forceRefresh ? '?force_refresh=true' : '';
+        const response = await fetch(`/api/weather${suffix}`);
+        const weather = await response.json();
+        const target = document.getElementById('weather');
+        if (!weather.available) {
+          target.textContent = weather.error || 'Weather is unavailable.';
+          return;
+        }
+        target.textContent = `${weather.location}: ${weather.condition}, ${weather.temperature_f}°F (feels like ${weather.feels_like_f}°F), humidity ${weather.humidity_percent}%, wind ${weather.wind_mph} mph.`;
       }
 
       async function detect() {

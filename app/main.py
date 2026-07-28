@@ -5,7 +5,7 @@ from fastapi.responses import FileResponse, JSONResponse
 from pydantic import BaseModel
 
 from .config import settings
-from .services import ask_ollama, detect_once
+from .services import ask_ollama, detect_once, get_weather, weather_summary
 from .state import LabState
 
 
@@ -58,6 +58,11 @@ def status() -> dict:
     return {"name": settings.name, "expansion": settings.expansion, **state.snapshot()}
 
 
+@app.get("/api/weather")
+async def weather(force_refresh: bool = False) -> dict:
+    return await get_weather(force_refresh=force_refresh)
+
+
 @app.post("/api/detect")
 def detect() -> dict:
     return {"message": detect_once(state), **state.snapshot()}
@@ -80,8 +85,10 @@ async def chat(request: ChatRequest) -> dict:
         scene = state.snapshot()
         labels = [item["label"] for item in scene["current_objects"]]
         answer = f"I see {', '.join(labels) if labels else 'no detected objects'}; watch mode is {scene['watch_mode']}."
+    elif message in {"/weather", "what is the weather?", "what's the weather?"}:
+        answer = weather_summary(await get_weather())
     elif message == "/help":
-        answer = "Try /status, /what-do-you-see, /watch-room, /stop-watch, or ask a question."
+        answer = "Try /status, /weather, /what-do-you-see, /watch-room, /stop-watch, or ask a question."
     else:
         answer = await ask_ollama(message, state.snapshot())
     return {"answer": answer, **state.snapshot()}

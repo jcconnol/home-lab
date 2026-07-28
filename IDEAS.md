@@ -6,11 +6,6 @@ This file is a living list of future capabilities. Ideas should be promoted into
 
 The ideas below remain grouped by domain for readability. This ranking orders every idea from easiest to most difficult based on the effort to deliver a safe, private, reliable home-lab version (not merely a prototype).
 
-### Level 1 — Easy
-
-1. **Personality** — prompt and preference configuration; no hardware or external service is required.
-2. **Weather integration** — a bounded, read-only API integration with local caching.
-
 ### Level 2 — Moderate
 
 3. **Music playback** — speaker/service integration and command handling.
@@ -119,12 +114,6 @@ Suggested progression:
 
 The microphone should remain muted or locally buffered until the wake word is detected, with an immediate physical mute option.
 
-### Personality
-
-Give G.R.A.C.E. a consistent, cool personality: calm, capable, lightly witty, technically clear, and honest about uncertainty.
-
-Personality should be configurable separately from the system name, with controls for verbosity, humor, formality, and whether proactive notifications are enabled.
-
 ## Media and household assistance
 
 ### Music playback
@@ -217,18 +206,6 @@ Early prototypes should use a removable camera module, physical privacy shutter 
 
 ## Information and daily routines
 
-### Weather integration
-
-Give G.R.A.C.E. a local weather capability for current conditions, forecasts, severe-weather alerts, and outdoor planning.
-
-Potential uses:
-
-- Include weather in morning and afternoon briefings.
-- Recommend indoor or outdoor workouts based on conditions.
-- Suggest when to open or close windows.
-- Warn about storms, extreme temperatures, or poor travel conditions.
-- Use a cached forecast so basic information remains available during a short outage.
-
 ### Morning and afternoon briefings
 
 Provide configurable daily briefings at wake-up and later in the day.
@@ -280,7 +257,7 @@ Voice recognition should be treated as a convenience signal rather than perfect 
 
 ## Suggested order
 
-1. Personality, music, and a polished dashboard.
+1. Music and a polished dashboard.
 2. Wi-Fi telemetry and event history.
 3. Local wake word and wrist/phone interaction.
 4. Cat feeder integration with safety limits.

@@ -17,8 +17,16 @@ class Settings:
     )
     yolo_model: str = os.getenv("GRACE_YOLO_MODEL", "yolo11n.pt")
     ollama_url: str = os.getenv("GRACE_OLLAMA_URL", "http://127.0.0.1:11434")
-    ollama_model: str = os.getenv("GRACE_OLLAMA_MODEL", "qwen2.5:7b")
+    ollama_model: str = os.getenv("GRACE_OLLAMA_MODEL", "qwen3:4b")
     tts_enabled: bool = os.getenv("GRACE_TTS_ENABLED", "false").lower() == "true"
+    personality: str = os.getenv(
+        "GRACE_PERSONALITY",
+        "calm, capable, lightly witty, technically clear, and honest about uncertainty",
+    )
+    weather_location: str = os.getenv("GRACE_WEATHER_LOCATION", "Home")
+    weather_latitude: float = float(os.getenv("GRACE_WEATHER_LATITUDE", "0"))
+    weather_longitude: float = float(os.getenv("GRACE_WEATHER_LONGITUDE", "0"))
+    weather_cache_seconds: int = int(os.getenv("GRACE_WEATHER_CACHE_SECONDS", "900"))
 
 
 settings = Settings()

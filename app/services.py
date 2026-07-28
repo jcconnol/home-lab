@@ -1,9 +1,36 @@
+import time
 from typing import Any
 
 import httpx
 
 from .config import settings
 from .state import LabState
+
+
+_weather_cache: tuple[float, dict] | None = None
+_WEATHER_CODES = {
+    0: "clear sky",
+    1: "mainly clear",
+    2: "partly cloudy",
+    3: "overcast",
+    45: "foggy",
+    48: "freezing fog",
+    51: "light drizzle",
+    53: "drizzle",
+    55: "heavy drizzle",
+    61: "light rain",
+    63: "rain",
+    65: "heavy rain",
+    71: "light snow",
+    73: "snow",
+    75: "heavy snow",
+    80: "light showers",
+    81: "showers",
+    82: "heavy showers",
+    95: "thunderstorm",
+    96: "thunderstorm with hail",
+    99: "thunderstorm with heavy hail",
+}
 
 
 def detect_once(state: LabState) -> str:
@@ -42,6 +69,7 @@ async def ask_ollama(prompt: str, scene: dict) -> str:
         "stream": False,
         "prompt": (
             f"You are {settings.name}, a concise local home-lab assistant.\n"
+            f"Your personality is {settings.personality}.\n"
             f"Current camera detections:\n{context}\n"
             f"Watch mode: {scene['watch_mode']}\nUser request: {prompt}"
         ),
@@ -53,6 +81,58 @@ async def ask_ollama(prompt: str, scene: dict) -> str:
             return response.json().get("response", "Ollama returned no response.").strip()
     except (httpx.HTTPError, ValueError):
         return "The local language model is unavailable. Start Ollama or use the scene endpoints."
+
+
+async def get_weather(force_refresh: bool = False) -> dict:
+    """Return cached current weather from Open-Meteo, or a useful offline error."""
+    global _weather_cache
+    now = time.monotonic()
+    if (
+        _weather_cache
+        and not force_refresh
+        and now - _weather_cache[0] < settings.weather_cache_seconds
+    ):
+        return _weather_cache[1]
+    if settings.weather_latitude == 0 and settings.weather_longitude == 0:
+        return {"available": False, "error": "Set GRACE_WEATHER_LATITUDE and GRACE_WEATHER_LONGITUDE."}
+    params = {
+        "latitude": settings.weather_latitude,
+        "longitude": settings.weather_longitude,
+        "current": "temperature_2m,relative_humidity_2m,apparent_temperature,weather_code,wind_speed_10m",
+        "temperature_unit": "fahrenheit",
+        "wind_speed_unit": "mph",
+        "timezone": "auto",
+    }
+    try:
+        async with httpx.AsyncClient(timeout=10) as client:
+            response = await client.get("https://api.open-meteo.com/v1/forecast", params=params)
+            response.raise_for_status()
+            payload = response.json()
+        current = payload["current"]
+        result = {
+            "available": True,
+            "location": settings.weather_location,
+            "updated_at": current["time"],
+            "temperature_f": current["temperature_2m"],
+            "feels_like_f": current["apparent_temperature"],
+            "humidity_percent": current["relative_humidity_2m"],
+            "wind_mph": current["wind_speed_10m"],
+            "condition": _WEATHER_CODES.get(current["weather_code"], "unknown conditions"),
+        }
+        _weather_cache = (now, result)
+        return result
+    except (httpx.HTTPError, KeyError, TypeError, ValueError):
+        return {"available": False, "error": "Weather is temporarily unavailable."}
+
+
+def weather_summary(weather: dict) -> str:
+    if not weather.get("available"):
+        return weather.get("error", "Weather is unavailable.")
+    return (
+        f"{weather['location']}: {weather['condition']}, "
+        f"{weather['temperature_f']}°F and feels like {weather['feels_like_f']}°F, "
+        f"humidity {weather['humidity_percent']}%, wind {weather['wind_mph']} mph."
+    )
 
 
 def frame_to_jpeg(frame: Any) -> bytes:

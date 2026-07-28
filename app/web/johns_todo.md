@@ -4,7 +4,7 @@ Use this file for anything that cannot be completed locally yet.
 
 ## Current Handoffs
 
-- None yet.
+- Weather: set `GRACE_WEATHER_LATITUDE` and `GRACE_WEATHER_LONGITUDE` in the local environment to enable the weather card.
 
 ## What To Add Here
 
