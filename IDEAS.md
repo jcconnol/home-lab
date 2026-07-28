@@ -8,12 +8,6 @@ The ideas below remain grouped by domain for readability. This ranking orders ev
 
 ### Level 2 — Moderate
 
-3. **Music playback** — speaker/service integration and command handling.
-4. **Morning and afternoon briefings** — scheduling plus composition from existing data sources.
-5. **Personal memory and preferences** — local persistence, user controls, and retention/export features.
-6. **Cinematic command center** — substantial dashboard work, but it can build on existing local data.
-7. **Network awareness** — device discovery, telemetry collection, storage, and privacy-respecting reporting.
-8. **Grace settings home page** — a focused UI for editing Grace's personality, behavior, preferences, and integrations.
 
 ### Level 3 — Challenging
 

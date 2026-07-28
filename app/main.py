@@ -2,6 +2,7 @@ from pathlib import Path
 import asyncio
 import socket
 import time
+from datetime import datetime, timezone
 
 from fastapi import FastAPI, Request
 from fastapi.responses import FileResponse, JSONResponse
@@ -19,6 +20,34 @@ WEB = Path(__file__).parent / "web"
 
 class ChatRequest(BaseModel):
     message: str
+
+
+class MusicCommand(BaseModel):
+    action: str
+    track: str | None = None
+    volume: int | None = None
+
+
+class MemoryRequest(BaseModel):
+    content: str
+    category: str = "note"
+
+
+class BriefingSchedule(BaseModel):
+    morning: str = "07:00"
+    afternoon: str = "13:00"
+    enabled: bool = False
+
+
+class SettingsUpdate(BaseModel):
+    personality: str | None = None
+    voice: str | None = None
+    confirm_sensitive_actions: bool | None = None
+
+
+class PreferenceUpdate(BaseModel):
+    key: str
+    value: str
 
 
 @app.get("/", response_class=FileResponse)
@@ -174,12 +203,104 @@ async def network_scan() -> dict:
     machines = sorted(discovered.values(), key=lambda item: tuple(int(part) for part in item["address"].split(".")))
     for machine in machines:
         machine["mac_address"] = arp.get(machine["address"])
-    return {
+    payload = {
         "subnet": "10.0.0.0/24",
         "scanned_hosts": 225,
         "ports": list(NETWORK_SCAN_PORTS),
         "machines": machines,
     }
+    state.record_network({"timestamp": datetime.now(timezone.utc).isoformat(), "machine_count": len(machines), "subnet": payload["subnet"]})
+    return payload
+
+
+@app.get("/api/network/telemetry")
+def network_telemetry() -> dict:
+    return {"history": list(state.network_telemetry)}
+
+
+@app.get("/api/music")
+def music() -> dict:
+    return {"available": False, "provider": "local-command-adapter", "message": "Playback commands are ready; configure a speaker provider to produce audio.", **state.music}
+
+
+@app.post("/api/music/command")
+def music_command(command: MusicCommand) -> dict:
+    action = command.action.lower().strip()
+    if action not in {"play", "pause", "stop", "next", "previous", "volume"}:
+        return JSONResponse({"error": "Unsupported music action."}, status_code=400)
+    changes: dict[str, object] = {}
+    if action == "play": changes = {"status": "playing", "track": command.track or state.music.get("track") or "Local playback queue"}
+    elif action in {"pause", "stop"}: changes = {"status": "paused" if action == "pause" else "stopped"}
+    elif action in {"next", "previous"}: changes = {"status": "playing", "track": f"{action.title()} track"}
+    elif command.volume is not None: changes = {"volume": max(0, min(100, command.volume))}
+    return {"available": False, "message": "Command recorded locally. Add a speaker adapter when ready.", **state.update_music(**changes)}
+
+
+@app.get("/api/memory")
+def memories() -> dict:
+    return {"memories": list(state.memories), "preferences": dict(state.preferences)}
+
+
+@app.post("/api/memory")
+def add_memory(memory: MemoryRequest) -> dict:
+    if not memory.content.strip():
+        return JSONResponse({"error": "content is required"}, status_code=400)
+    return state.add_memory(memory.content.strip(), memory.category.strip() or "note")
+
+
+@app.delete("/api/memory/{memory_id}")
+def delete_memory(memory_id: str) -> dict:
+    return {"deleted": state.remove_memory(memory_id)}
+
+
+@app.put("/api/memory/preferences")
+def update_preference(preference: PreferenceUpdate) -> dict:
+    if not preference.key.strip():
+        return JSONResponse({"error": "key is required"}, status_code=400)
+    state.preferences[preference.key.strip()] = preference.value.strip(); state._save()
+    return {"preferences": dict(state.preferences)}
+
+
+@app.get("/api/memory/export")
+def export_memory() -> JSONResponse:
+    return JSONResponse({"memories": state.memories, "preferences": state.preferences})
+
+
+@app.get("/api/briefings")
+def briefings() -> dict:
+    return {"schedule": dict(state.briefing_schedule), "history": list(state.briefings)}
+
+
+@app.put("/api/briefings/schedule")
+def update_briefing_schedule(schedule: BriefingSchedule) -> dict:
+    state.briefing_schedule = schedule.model_dump()
+    state._save()
+    return state.briefing_schedule
+
+
+@app.post("/api/briefings/{period}")
+async def create_briefing(period: str) -> dict:
+    if period not in {"morning", "afternoon"}:
+        return JSONResponse({"error": "period must be morning or afternoon"}, status_code=400)
+    weather_data = await get_weather()
+    scene = state.snapshot()
+    text = f"{period.title()} briefing: {len(scene['current_objects'])} scene object(s), {scene['memory_count']} saved memory item(s). "
+    text += weather_summary(weather_data) if weather_data.get("available") else "Weather is currently unavailable."
+    item = {"period": period, "text": text, "created_at": datetime.now(timezone.utc).isoformat()}
+    state.add_briefing(item)
+    return item
+
+
+@app.get("/api/settings")
+def grace_settings() -> dict:
+    return dict(state.grace_settings)
+
+
+@app.put("/api/settings")
+def update_grace_settings(update: SettingsUpdate) -> dict:
+    changes = {key: value for key, value in update.model_dump().items() if value is not None}
+    state.grace_settings.update(changes); state._save()
+    return dict(state.grace_settings)
 
 
 @app.post("/api/detect")
