@@ -1,5 +1,7 @@
 from pathlib import Path
+import asyncio
 import socket
+import time
 
 from fastapi import FastAPI, Request
 from fastapi.responses import FileResponse, JSONResponse
@@ -78,6 +80,53 @@ def network(request: Request) -> dict:
         "server_port": request.url.port or settings.port,
         "client_host": request.client.host if request.client else None,
         "local_only": True,
+    }
+
+
+NETWORK_SCAN_PORTS = (22, 53, 80, 443, 445, 3389, 8000, 8080, 11434)
+
+
+async def _probe_host(host: str, semaphore: asyncio.Semaphore) -> dict | None:
+    async with semaphore:
+        open_ports: list[int] = []
+        started = time.perf_counter()
+        for port in NETWORK_SCAN_PORTS:
+            try:
+                reader, writer = await asyncio.wait_for(
+                    asyncio.open_connection(host, port), timeout=0.25
+                )
+                writer.close()
+                await writer.wait_closed()
+                open_ports.append(port)
+            except (ConnectionError, OSError, asyncio.TimeoutError):
+                continue
+        if not open_ports:
+            return None
+        try:
+            hostname = await asyncio.to_thread(socket.gethostbyaddr, host)
+            name = hostname[0]
+        except (socket.herror, socket.gaierror, OSError):
+            name = None
+        return {
+            "address": host,
+            "hostname": name,
+            "open_ports": open_ports,
+            "latency_ms": round((time.perf_counter() - started) * 1000),
+        }
+
+
+@app.get("/api/network/scan")
+async def network_scan() -> dict:
+    """Discover responsive hosts on the user's fixed 10.0.0.x private subnet."""
+    semaphore = asyncio.Semaphore(32)
+    hosts = [f"10.0.0.{number}" for number in range(1, 226)]
+    results = await asyncio.gather(*(_probe_host(host, semaphore) for host in hosts))
+    machines = sorted((result for result in results if result), key=lambda item: item["address"])
+    return {
+        "subnet": "10.0.0.0/24",
+        "scanned_hosts": 225,
+        "ports": list(NETWORK_SCAN_PORTS),
+        "machines": machines,
     }
 
 
