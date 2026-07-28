@@ -214,6 +214,25 @@ Morning briefing topics could include weather, calendar, Garmin recovery, workou
 
 The user should control the time, delivery method, included topics, and whether G.R.A.C.E. is allowed to proactively speak.
 
+### Calendar integration
+
+Connect G.R.A.C.E. to the user's calendar so it can answer schedule questions and include upcoming commitments in briefings.
+
+Possible capabilities:
+
+- Read today's and upcoming events, including start time, duration, location, and reminders.
+- Answer questions such as “What is next?” or “Am I free this afternoon?”
+- Include upcoming events in morning and afternoon briefings.
+- Add, edit, or cancel events only after explicit confirmation.
+- Support a local calendar first, with opt-in providers such as Google or Microsoft 365 later.
+
+Privacy and safety requirements:
+
+- Keep calendar data local by default and request the minimum read/write permissions.
+- Show the connected account, granted scopes, last synchronization time, and stored data.
+- Require confirmation before creating, changing, or deleting an event.
+- Provide a disconnect, purge, and export control.
+
 ### Personal memory and preferences
 
 Let G.R.A.C.E. remember useful personal preferences such as favorite music, rooms, routines, workout style, device names, communication style, and recurring tasks.
