@@ -88,20 +88,13 @@ NETWORK_SCAN_PORTS = (22, 53, 80, 443, 445, 3389, 8000, 8080, 11434)
 
 async def _probe_host(host: str, semaphore: asyncio.Semaphore) -> dict | None:
     async with semaphore:
-        open_ports: list[int] = []
         started = time.perf_counter()
-        for port in NETWORK_SCAN_PORTS:
-            try:
-                reader, writer = await asyncio.wait_for(
-                    asyncio.open_connection(host, port), timeout=0.25
-                )
-                writer.close()
-                await writer.wait_closed()
-                open_ports.append(port)
-            except (ConnectionError, OSError, asyncio.TimeoutError):
-                continue
-        if not open_ports:
+        ping_task = asyncio.create_task(_ping_host(host))
+        ports_task = asyncio.create_task(_probe_ports(host))
+        reachable_by_ping, open_ports = await asyncio.gather(ping_task, ports_task)
+        if not reachable_by_ping and not open_ports:
             return None
+        method = "ping+tcp" if reachable_by_ping and open_ports else "ping" if reachable_by_ping else "tcp"
         try:
             hostname = await asyncio.to_thread(socket.gethostbyaddr, host)
             name = hostname[0]
@@ -111,8 +104,54 @@ async def _probe_host(host: str, semaphore: asyncio.Semaphore) -> dict | None:
             "address": host,
             "hostname": name,
             "open_ports": open_ports,
+            "reachable_by_ping": reachable_by_ping,
+            "method": method,
             "latency_ms": round((time.perf_counter() - started) * 1000),
         }
+
+
+async def _ping_host(host: str) -> bool:
+    try:
+        process = await asyncio.create_subprocess_exec(
+            "ping.exe", "-n", "1", "-w", "250", host,
+            stdout=asyncio.subprocess.DEVNULL,
+            stderr=asyncio.subprocess.DEVNULL,
+        )
+        await asyncio.wait_for(process.wait(), timeout=1)
+        return process.returncode == 0
+    except (OSError, asyncio.TimeoutError):
+        return False
+
+
+async def _probe_ports(host: str) -> list[int]:
+    open_ports: list[int] = []
+    for port in NETWORK_SCAN_PORTS:
+        try:
+            _, writer = await asyncio.wait_for(
+                asyncio.open_connection(host, port), timeout=0.25
+            )
+            writer.close()
+            await writer.wait_closed()
+            open_ports.append(port)
+        except (ConnectionError, OSError, asyncio.TimeoutError):
+            continue
+    return open_ports
+
+
+async def _arp_table() -> dict[str, str]:
+    try:
+        process = await asyncio.create_subprocess_exec(
+            "arp.exe", "-a", stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.DEVNULL
+        )
+        output, _ = await asyncio.wait_for(process.communicate(), timeout=5)
+    except (OSError, asyncio.TimeoutError):
+        return {}
+    table: dict[str, str] = {}
+    for line in output.decode(errors="ignore").splitlines():
+        parts = line.split()
+        if len(parts) >= 2 and parts[0].startswith("10.0.0.") and parts[0].count(".") == 3:
+            table[parts[0]] = parts[1]
+    return table
 
 
 @app.get("/api/network/scan")
@@ -121,7 +160,20 @@ async def network_scan() -> dict:
     semaphore = asyncio.Semaphore(32)
     hosts = [f"10.0.0.{number}" for number in range(1, 226)]
     results = await asyncio.gather(*(_probe_host(host, semaphore) for host in hosts))
-    machines = sorted((result for result in results if result), key=lambda item: item["address"])
+    arp = await _arp_table()
+    discovered = {result["address"]: result for result in results if result}
+    for address, mac_address in arp.items():
+        discovered.setdefault(address, {
+            "address": address,
+            "hostname": None,
+            "open_ports": [],
+            "reachable_by_ping": False,
+            "method": "arp",
+            "latency_ms": None,
+        })
+    machines = sorted(discovered.values(), key=lambda item: tuple(int(part) for part in item["address"].split(".")))
+    for machine in machines:
+        machine["mac_address"] = arp.get(machine["address"])
     return {
         "subnet": "10.0.0.0/24",
         "scanned_hosts": 225,
