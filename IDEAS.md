@@ -11,7 +11,7 @@ The ideas below remain grouped by domain for readability. This ranking orders ev
 3. **Music playback** — speaker/service integration and command handling.
 4. **Morning and afternoon briefings** — scheduling plus composition from existing data sources.
 5. **Personal memory and preferences** — local persistence, user controls, and retention/export features.
-6. **Tony Stark-inspired command center** — substantial dashboard work, but it can build on existing local data.
+6. **Cinematic command center** — substantial dashboard work, but it can build on existing local data.
 7. **Network awareness** — device discovery, telemetry collection, storage, and privacy-respecting reporting.
 
 ### Level 3 — Challenging
@@ -68,7 +68,7 @@ Design requirements:
 - Show battery, signal strength, flight mode, and camera status before enabling controls.
 - Default to “view only”; flight control should require an explicit unlock.
 
-## Tony Stark-inspired command center
+## Cinematic command center
 
 Create a one-stop system overview with a polished cinematic interface inspired by a high-tech lab console.
 

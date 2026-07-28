@@ -55,7 +55,7 @@ Do not commit secrets, `.env` files, credentials, camera footage, model weights,
 - Personal memory and preferences
   - Build: local persistence, edit controls, export, and reset.
   - Validate: save a preference, reload, and confirm it persists.
-- Tony Stark-inspired command center
+- Cinematic command center
   - Build: a clearer dashboard for status, controls, and summaries.
   - Validate: confirm the main views stay reachable on desktop and phone.
 - Network awareness
