@@ -13,25 +13,37 @@ The ideas below remain grouped by domain for readability. This ranking orders ev
 5. **Personal memory and preferences** — local persistence, user controls, and retention/export features.
 6. **Cinematic command center** — substantial dashboard work, but it can build on existing local data.
 7. **Network awareness** — device discovery, telemetry collection, storage, and privacy-respecting reporting.
+8. **Grace settings home page** — a focused UI for editing Grace's personality, behavior, preferences, and integrations.
 
 ### Level 3 — Challenging
 
-8. **Always-listening keyword** — continuous local audio processing, clear microphone state, and mute controls.
-9. **Garmin activity integration** — third-party data access, local health-data handling, and explainable recommendations.
-10. **Automated cat feeder** — physical-device integration with durable scheduling, limits, sensing, and failure alerts.
+9. **Always-listening keyword** — continuous local audio processing, clear microphone state, and mute controls.
+10. **Garmin activity integration** — third-party data access, local health-data handling, and explainable recommendations.
+11. **Smart wall-plug control** — device discovery, local protocols, safe switching, schedules, and failure reporting.
+12. **Automated cat feeder** — physical-device integration with durable scheduling, limits, sensing, and failure alerts.
 
 ### Level 4 — Hard
 
-11. **Private personal phone app** — a secure mobile client, push/voice features, and remote access.
-12. **Voice identity guardrail** — speaker verification plus reliable second-factor and permission workflows.
-13. **Wrist tool** — companion-device or custom-hardware integration with audio, display, battery, and controls.
-14. **Remote manual drone control** — secure remote control, video, loss-of-connection failsafes, and physical safety.
+13. **Private personal phone app** — a secure mobile client, push/voice features, and remote access.
+14. **Voice identity guardrail** — speaker verification plus reliable second-factor and permission workflows.
+15. **Wrist tool** — companion-device or custom-hardware integration with audio, display, battery, and controls.
+16. **Remote manual drone control** — secure remote control, video, loss-of-connection failsafes, and physical safety.
 
 ### Level 5 — Very hard
 
-15. **3D-printed camera glasses** — comfortable custom hardware, camera/phone integration, and privacy indicators.
-16. **Controlled self-improvement** — sandboxing, approval gates, testing, secure rollback, and strict safety boundaries.
-17. **Autonomous indoor drone** — indoor localization, obstacle avoidance, docking, reliable autonomy, and high safety risk.
+17. **3D-printed camera glasses** — comfortable custom hardware, camera/phone integration, and privacy indicators.
+18. **Controlled self-improvement** — sandboxing, approval gates, testing, secure rollback, and strict safety boundaries.
+19. **Autonomous indoor drone** — indoor localization, obstacle avoidance, docking, reliable autonomy, and high safety risk.
+
+## Newly requested ideas
+
+### Grace settings home page (Level 2 — Moderate)
+
+Add a dedicated home page where the user can review and edit Grace's personality, response style, preferred name, enabled capabilities, privacy defaults, and connected integrations. Changes should be previewable, validated, and saved locally. Sensitive settings should require confirmation, and the page should show the current configuration, reset controls, and an audit trail of changes.
+
+### Smart wall-plug control (Level 3 — Challenging)
+
+Connect Grace to compatible smart wall plugs so it can report power state and perform approved on/off actions. Start with local-network protocols and an explicit device-pairing step. Each plug should have a friendly name, room, current state, and safety policy. Require confirmation for potentially disruptive actions, provide schedules and timeout safeguards, and report unreachable devices or failed commands clearly.
 
 ## Home presence and robotics
 
