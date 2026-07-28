@@ -1,6 +1,7 @@
 from pathlib import Path
+import socket
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.responses import FileResponse, JSONResponse
 from pydantic import BaseModel
 
@@ -61,6 +62,23 @@ def status() -> dict:
 @app.get("/api/weather")
 async def weather(force_refresh: bool = False) -> dict:
     return await get_weather(force_refresh=force_refresh)
+
+
+@app.get("/api/network")
+def network(request: Request) -> dict:
+    hostname = socket.gethostname()
+    try:
+        addresses = sorted({address[4][0] for address in socket.getaddrinfo(hostname, None)})
+    except socket.gaierror:
+        addresses = []
+    return {
+        "hostname": hostname,
+        "addresses": addresses,
+        "server_host": request.url.hostname,
+        "server_port": request.url.port or settings.port,
+        "client_host": request.client.host if request.client else None,
+        "local_only": True,
+    }
 
 
 @app.post("/api/detect")
