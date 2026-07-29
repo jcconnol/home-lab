@@ -5,11 +5,11 @@ import time
 from datetime import datetime, timezone
 
 from fastapi import FastAPI, Request
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 from pydantic import BaseModel
 
 from .config import settings
-from .services import ask_ollama, detect_once, get_weather, weather_summary
+from .services import ask_ollama, ask_ollama_stream, detect_once, get_weather, weather_summary
 from .state import LabState
 
 
@@ -352,4 +352,20 @@ async def chat(request: ChatRequest) -> dict:
         scene["memories"] = list(state.memories)
         answer = await ask_ollama(message, scene)
     return {"answer": answer, **state.snapshot()}
+
+
+@app.post("/api/chat/stream")
+async def chat_stream(request: ChatRequest) -> StreamingResponse:
+    message = request.message.strip()
+    if not message:
+        return StreamingResponse(iter(("Message is required.",)), media_type="text/plain")
+    lower = message.lower()
+    if lower.startswith(("remember that ", "save a note: ", "save note: ")):
+        prefix = next(prefix for prefix in ("remember that ", "save a note: ", "save note: ") if lower.startswith(prefix))
+        content = message[len(prefix):].strip()
+        answer = "Tell me what you want remembered, and I will save it." if not content else f"Saved that note: {state.add_memory(content, 'chat note')['content']}"
+        return StreamingResponse(iter((answer,)), media_type="text/plain")
+    scene = state.snapshot()
+    scene["memories"] = list(state.memories)
+    return StreamingResponse(ask_ollama_stream(message, scene), media_type="text/plain; charset=utf-8")
 

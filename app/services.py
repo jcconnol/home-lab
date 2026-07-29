@@ -1,5 +1,7 @@
 import time
 import re
+import json
+from collections.abc import AsyncIterator
 from typing import Any
 
 import httpx
@@ -87,6 +89,28 @@ async def ask_ollama(prompt: str, scene: dict) -> str:
             return _without_emojis(response.json().get("response", "Ollama returned no response."))
     except (httpx.HTTPError, ValueError):
         return "The local language model is unavailable. Start Ollama or use the scene endpoints."
+
+
+async def ask_ollama_stream(prompt: str, scene: dict) -> AsyncIterator[str]:
+    """Yield Ollama response text as it is generated."""
+    context = "\n".join(f'- {item["label"]} (confidence {item["confidence"]})' for item in scene["current_objects"]) or "- nothing detected"
+    memory_context = "\n".join(f'- {item["content"]}' for item in scene.get("memories", [])) or "- no saved memories"
+    payload = {"model": settings.ollama_model, "stream": True, "prompt": f"You are {settings.name}, a concise local home-lab assistant.\nYour personality is {settings.personality}.\nCurrent camera detections:\n{context}\nWatch mode: {scene['watch_mode']}\nSaved user memories (use only when relevant):\n{memory_context}\nUser request: {prompt}"}
+    try:
+        async with httpx.AsyncClient(timeout=60) as client:
+            async with client.stream("POST", f"{settings.ollama_url}/api/generate", json=payload) as response:
+                response.raise_for_status()
+                async for line in response.aiter_lines():
+                    if not line:
+                        continue
+                    try:
+                        text = _without_emojis(json.loads(line).get("response", ""))
+                    except (TypeError, ValueError):
+                        continue
+                    if text:
+                        yield text
+    except (httpx.HTTPError, ValueError):
+        yield "The local language model is unavailable. Start Ollama or use the scene endpoints."
 
 
 async def get_weather(force_refresh: bool = False) -> dict:
