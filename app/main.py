@@ -335,7 +335,15 @@ async def chat(request: ChatRequest) -> dict:
     elif message in {"/weather", "what is the weather?", "what's the weather?"}:
         answer = weather_summary(await get_weather())
     elif message == "/help":
-        answer = "Try /status, /weather, /what-do-you-see, /watch-room, /stop-watch, or ask a question."
+        answer = "Try /status, /weather, /what-do-you-see, /watch-room, /stop-watch, or say 'remember that ...' to save a note."
+    elif message.lower().startswith(("remember that ", "save a note: ", "save note: ")):
+        prefix = next(prefix for prefix in ("remember that ", "save a note: ", "save note: ") if message.lower().startswith(prefix))
+        content = message[len(prefix):].strip()
+        if not content:
+            answer = "Tell me what you want remembered, and I will save it."
+        else:
+            saved = state.add_memory(content, "chat note")
+            answer = f"Saved that note: {saved['content']}"
     elif any(term in message.lower() for term in ("what note", "saved note", "remembered")):
         memories = state.memories
         answer = "I have no saved notes." if not memories else "Saved notes:\n" + "\n".join(f"- {item['content']}" for item in memories)
