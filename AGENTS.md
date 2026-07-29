@@ -83,3 +83,7 @@ The repository has no established commit history yet. Use short imperative commi
 ## Security and Configuration
 
 Never commit `.env`, credentials, camera footage, model weights, or health data. Use `.env.example` for documented defaults. Treat voice identification as a convenience signal; require a second factor for sensitive actions. Preserve local-only defaults and explicit approval for remote control or self-modifying behavior.
+
+## Dashboard UI Verification
+
+For dashboard UI changes, open the local service and visit every affected route (including mobile-width viewport behavior) before declaring the change complete. Check that text wraps cleanly, controls remain reachable, and navigation works. Record any environment limitation that prevents visual inspection.

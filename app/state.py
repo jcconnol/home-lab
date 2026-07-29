@@ -12,7 +12,7 @@ class LabState:
         self.objects: list[dict] = []
         self.events: deque[dict] = deque(maxlen=100)
         self.watch_mode = False
-        self.music = {"status": "stopped", "track": None, "volume": 50, "updated_at": None}
+        self.music = {"status": "stopped", "track": None, "volume": 50, "shuffle": False, "queue": ["Ambient Systems", "Morning Circuit", "Quiet Focus"], "index": 0, "updated_at": None}
         self.memories: list[dict] = []
         self.preferences: dict[str, str] = {}
         self.briefing_schedule = {"morning": "07:00", "afternoon": "13:00", "enabled": False}
@@ -27,6 +27,9 @@ class LabState:
             for key in ("music", "memories", "preferences", "briefing_schedule", "briefings", "network_telemetry", "grace_settings"):
                 if key in data:
                     setattr(self, key, data[key])
+            self.music.setdefault("shuffle", False)
+            self.music.setdefault("queue", ["Ambient Systems", "Morning Circuit", "Quiet Focus"])
+            self.music.setdefault("index", 0)
         except (OSError, ValueError, TypeError):
             pass
 

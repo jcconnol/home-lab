@@ -226,12 +226,19 @@ def music() -> dict:
 @app.post("/api/music/command")
 def music_command(command: MusicCommand) -> dict:
     action = command.action.lower().strip()
-    if action not in {"play", "pause", "stop", "next", "previous", "volume"}:
+    if action not in {"play", "pause", "stop", "next", "previous", "volume", "shuffle", "select"}:
         return JSONResponse({"error": "Unsupported music action."}, status_code=400)
     changes: dict[str, object] = {}
-    if action == "play": changes = {"status": "playing", "track": command.track or state.music.get("track") or "Local playback queue"}
+    queue = state.music.get("queue", [])
+    if action == "select" and command.track in queue:
+        changes = {"status": "playing", "track": command.track, "index": queue.index(command.track)}
+    elif action == "play": changes = {"status": "playing", "track": command.track or state.music.get("track") or (queue[0] if queue else "Local playback queue")}
     elif action in {"pause", "stop"}: changes = {"status": "paused" if action == "pause" else "stopped"}
-    elif action in {"next", "previous"}: changes = {"status": "playing", "track": f"{action.title()} track"}
+    elif action in {"next", "previous"} and queue:
+        step = 1 if action == "next" else -1
+        index = (int(state.music.get("index", 0)) + step) % len(queue)
+        changes = {"status": "playing", "track": queue[index], "index": index}
+    elif action == "shuffle": changes = {"shuffle": bool(command.track == "on")}
     elif command.volume is not None: changes = {"volume": max(0, min(100, command.volume))}
     return {"available": False, "message": "Command recorded locally. Add a speaker adapter when ready.", **state.update_music(**changes)}
 
