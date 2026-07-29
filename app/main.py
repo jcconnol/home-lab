@@ -2,9 +2,13 @@ from pathlib import Path
 import asyncio
 import socket
 import time
+import base64
+import hashlib
+import hmac
+import secrets
 from datetime import datetime, timezone
 
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 from pydantic import BaseModel
 
@@ -20,6 +24,7 @@ WEB = Path(__file__).parent / "web"
 
 class ChatRequest(BaseModel):
     message: str
+    conversation_id: str | None = None
 
 
 class MusicCommand(BaseModel):
@@ -43,6 +48,50 @@ class SettingsUpdate(BaseModel):
     personality: str | None = None
     voice: str | None = None
     confirm_sensitive_actions: bool | None = None
+
+
+class LoginRequest(BaseModel):
+    username: str
+    password: str
+
+
+class SignupRequest(BaseModel):
+    username: str
+    password: str
+
+
+SESSIONS: dict[str, dict] = {}
+
+
+def _hash_password(password: str) -> str:
+    salt = secrets.token_urlsafe(16)
+    digest = hashlib.pbkdf2_hmac("sha256", password.encode(), salt.encode(), 200000)
+    return f"pbkdf2_sha256$200000${salt}${base64.urlsafe_b64encode(digest).decode()}"
+
+
+def _password_matches(password: str) -> bool:
+    try:
+        algorithm, rounds, salt, expected = settings.admin_password_hash.split("$", 3)
+        if algorithm != "pbkdf2_sha256":
+            return False
+        derived = hashlib.pbkdf2_hmac("sha256", password.encode(), salt.encode(), int(rounds))
+        return hmac.compare_digest(base64.urlsafe_b64encode(derived).decode(), expected)
+    except (ValueError, TypeError):
+        return False
+
+
+def require_admin(request: Request) -> None:
+    token = request.cookies.get("grace_admin_session")
+    if not token or SESSIONS.get(token, {}).get("role") != "admin":
+        raise HTTPException(status_code=401, detail="Admin login required.")
+
+
+def require_user(request: Request) -> dict:
+    token = request.cookies.get("grace_admin_session")
+    user = SESSIONS.get(token or "")
+    if not user:
+        raise HTTPException(status_code=401, detail="Login required.")
+    return user
 
 
 class PreferenceUpdate(BaseModel):
@@ -88,6 +137,62 @@ def icon() -> FileResponse:
 @app.get("/api/status")
 def status() -> dict:
     return {"name": settings.name, "expansion": settings.expansion, **state.snapshot()}
+
+
+@app.post("/api/auth/login")
+def login(credentials: LoginRequest) -> JSONResponse:
+    user: dict | None = None
+    if settings.admin_password_hash and hmac.compare_digest(credentials.username, settings.admin_username) and _password_matches(credentials.password):
+        user = {"id": "admin", "username": settings.admin_username, "role": "admin"}
+    else:
+        account = next((item for item in state.users if item["username"].lower() == credentials.username.lower()), None)
+        if account and _password_matches_hash(credentials.password, account["password_hash"]):
+            user = {"id": account["id"], "username": account["username"], "role": "user"}
+    if not user:
+        return JSONResponse({"error": "Invalid admin credentials."}, status_code=401)
+    token = secrets.token_urlsafe(32)
+    SESSIONS[token] = user
+    response = JSONResponse({"authenticated": True, **user})
+    response.set_cookie("grace_admin_session", token, httponly=True, samesite="lax", max_age=86400)
+    return response
+
+
+@app.post("/api/auth/logout")
+def logout(request: Request) -> JSONResponse:
+    token = request.cookies.get("grace_admin_session")
+    if token:
+        SESSIONS.pop(token, None)
+    response = JSONResponse({"authenticated": False})
+    response.delete_cookie("grace_admin_session")
+    return response
+
+
+@app.get("/api/auth/me")
+def auth_me(request: Request) -> dict:
+    token = request.cookies.get("grace_admin_session")
+    user = SESSIONS.get(token or "")
+    return {"authenticated": bool(user), **(user or {})}
+
+
+def _password_matches_hash(password: str, encoded: str) -> bool:
+    try:
+        algorithm, rounds, salt, expected = encoded.split("$", 3)
+        derived = hashlib.pbkdf2_hmac("sha256", password.encode(), salt.encode(), int(rounds))
+        return algorithm == "pbkdf2_sha256" and hmac.compare_digest(base64.urlsafe_b64encode(derived).decode(), expected)
+    except (ValueError, TypeError):
+        return False
+
+
+@app.post("/api/auth/signup")
+def signup(credentials: SignupRequest) -> JSONResponse:
+    username = credentials.username.strip()
+    if len(username) < 3 or len(credentials.password) < 8:
+        return JSONResponse({"error": "Use a username of at least 3 characters and a password of at least 8 characters."}, status_code=400)
+    if username.lower() == settings.admin_username.lower() or any(item["username"].lower() == username.lower() for item in state.users):
+        return JSONResponse({"error": "That username is already in use."}, status_code=409)
+    account = {"id": secrets.token_urlsafe(12), "username": username, "password_hash": _hash_password(credentials.password), "created_at": datetime.now(timezone.utc).isoformat()}
+    state.add_user(account)
+    return JSONResponse({"created": True, "username": username}, status_code=201)
 
 
 @app.get("/api/weather")
@@ -299,12 +404,14 @@ async def create_briefing(period: str) -> dict:
 
 
 @app.get("/api/settings")
-def grace_settings() -> dict:
+def grace_settings(request: Request) -> dict:
+    require_admin(request)
     return dict(state.grace_settings)
 
 
 @app.put("/api/settings")
-def update_grace_settings(update: SettingsUpdate) -> dict:
+def update_grace_settings(update: SettingsUpdate, request: Request) -> dict:
+    require_admin(request)
     changes = {key: value for key, value in update.model_dump().items() if value is not None}
     state.grace_settings.update(changes); state._save()
     return dict(state.grace_settings)
@@ -316,10 +423,13 @@ def detect() -> dict:
 
 
 @app.post("/api/chat")
-async def chat(request: ChatRequest) -> dict:
+async def chat(request: ChatRequest, http_request: Request) -> dict:
+    user = require_user(http_request)
     message = request.message.strip()
     if not message:
         return JSONResponse({"error": "message is required"}, status_code=400)
+    conversation_id = request.conversation_id or secrets.token_urlsafe(12)
+    state.add_conversation_message(user["id"], user["username"], conversation_id, "user", message)
     if message in {"/watch-room", "watch the room"}:
         state.watch_mode = True
         state.add_event("watch mode enabled")
@@ -351,21 +461,40 @@ async def chat(request: ChatRequest) -> dict:
         scene = state.snapshot()
         scene["memories"] = list(state.memories)
         answer = await ask_ollama(message, scene)
-    return {"answer": answer, **state.snapshot()}
+    state.add_conversation_message(user["id"], user["username"], conversation_id, "assistant", answer)
+    return {"answer": answer, "conversation_id": conversation_id, **state.snapshot()}
 
 
 @app.post("/api/chat/stream")
-async def chat_stream(request: ChatRequest) -> StreamingResponse:
+async def chat_stream(request: ChatRequest, http_request: Request) -> StreamingResponse:
+    user = require_user(http_request)
     message = request.message.strip()
     if not message:
         return StreamingResponse(iter(("Message is required.",)), media_type="text/plain")
+    conversation_id = request.conversation_id or secrets.token_urlsafe(12)
+    state.add_conversation_message(user["id"], user["username"], conversation_id, "user", message)
     lower = message.lower()
     if lower.startswith(("remember that ", "save a note: ", "save note: ")):
         prefix = next(prefix for prefix in ("remember that ", "save a note: ", "save note: ") if lower.startswith(prefix))
         content = message[len(prefix):].strip()
         answer = "Tell me what you want remembered, and I will save it." if not content else f"Saved that note: {state.add_memory(content, 'chat note')['content']}"
-        return StreamingResponse(iter((answer,)), media_type="text/plain")
+        state.add_conversation_message(user["id"], user["username"], conversation_id, "assistant", answer)
+        return StreamingResponse(iter((answer,)), media_type="text/plain", headers={"X-Conversation-Id": conversation_id})
     scene = state.snapshot()
     scene["memories"] = list(state.memories)
-    return StreamingResponse(ask_ollama_stream(message, scene), media_type="text/plain; charset=utf-8")
+    async def generate():
+        parts: list[str] = []
+        async for part in ask_ollama_stream(message, scene):
+            parts.append(part)
+            yield part
+        state.add_conversation_message(user["id"], user["username"], conversation_id, "assistant", "".join(parts))
+    return StreamingResponse(generate(), media_type="text/plain; charset=utf-8", headers={"X-Conversation-Id": conversation_id})
+
+
+@app.get("/api/conversations")
+def conversations(request: Request) -> dict:
+    user = require_user(request)
+    if user["role"] == "admin":
+        return {"conversations": list(state.conversations)}
+    return {"conversations": [item for item in state.conversations if item["user_id"] == user["id"]]}
 

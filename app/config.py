@@ -32,6 +32,8 @@ class Settings:
     weather_latitude: float = float(os.getenv("GRACE_WEATHER_LATITUDE", "0"))
     weather_longitude: float = float(os.getenv("GRACE_WEATHER_LONGITUDE", "0"))
     weather_cache_seconds: int = int(os.getenv("GRACE_WEATHER_CACHE_SECONDS", "900"))
+    admin_username: str = os.getenv("GRACE_ADMIN_USERNAME", "admin")
+    admin_password_hash: str = os.getenv("GRACE_ADMIN_PASSWORD_HASH", "")
 
 
 settings = Settings()

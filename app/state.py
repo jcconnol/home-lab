@@ -19,12 +19,14 @@ class LabState:
         self.briefings: list[dict] = []
         self.network_telemetry: list[dict] = []
         self.grace_settings = {"personality": "funny, dry-witted, calm, capable, technically clear", "voice": "local", "confirm_sensitive_actions": True}
+        self.users: list[dict] = []
+        self.conversations: list[dict] = []
         self._load()
 
     def _load(self) -> None:
         try:
             data = json.loads(self._data_file.read_text(encoding="utf-8"))
-            for key in ("music", "memories", "preferences", "briefing_schedule", "briefings", "network_telemetry", "grace_settings"):
+            for key in ("music", "memories", "preferences", "briefing_schedule", "briefings", "network_telemetry", "grace_settings", "users", "conversations"):
                 if key in data:
                     setattr(self, key, data[key])
             self.music.setdefault("shuffle", False)
@@ -34,7 +36,7 @@ class LabState:
             pass
 
     def _save(self) -> None:
-        payload = {key: getattr(self, key) for key in ("music", "memories", "preferences", "briefing_schedule", "briefings", "network_telemetry", "grace_settings")}
+        payload = {key: getattr(self, key) for key in ("music", "memories", "preferences", "briefing_schedule", "briefings", "network_telemetry", "grace_settings", "users", "conversations")}
         try:
             self._data_file.write_text(json.dumps(payload, indent=2), encoding="utf-8")
         except OSError:
@@ -75,6 +77,19 @@ class LabState:
     def record_network(self, summary: dict) -> None:
         with self._lock:
             self.network_telemetry.append(summary); self.network_telemetry = self.network_telemetry[-50:]; self._save()
+
+    def add_user(self, user: dict) -> None:
+        with self._lock:
+            self.users.append(user); self._save()
+
+    def add_conversation_message(self, user_id: str, username: str, conversation_id: str, role: str, content: str) -> None:
+        with self._lock:
+            conversation = next((item for item in self.conversations if item["id"] == conversation_id and item["user_id"] == user_id), None)
+            if conversation is None:
+                conversation = {"id": conversation_id, "user_id": user_id, "username": username, "title": content[:32], "messages": []}
+                self.conversations.append(conversation)
+            conversation["messages"].append({"role": role, "content": content})
+            self._save()
 
     def update_objects(self, objects: list[dict]) -> None:
         with self._lock:
