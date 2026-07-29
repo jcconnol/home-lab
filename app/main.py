@@ -85,15 +85,6 @@ def icon() -> FileResponse:
     return FileResponse(WEB / "icon.svg", media_type="image/svg+xml")
 
 
-@app.get("/setup/grace-root-ca.pem", response_model=None)
-def grace_root_ca() -> FileResponse | JSONResponse:
-    """Download the public local CA certificate for one-time device trust setup."""
-    ca_path = Path.home() / "AppData" / "Local" / "mkcert" / "rootCA.pem"
-    if not ca_path.is_file():
-        return JSONResponse({"error": "The local CA certificate is not installed on this computer."}, status_code=404)
-    return FileResponse(ca_path, media_type="application/x-pem-file", filename="grace-root-ca.pem")
-
-
 @app.get("/api/status")
 def status() -> dict:
     return {"name": settings.name, "expansion": settings.expansion, **state.snapshot()}
