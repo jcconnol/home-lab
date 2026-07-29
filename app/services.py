@@ -69,6 +69,7 @@ async def ask_ollama(prompt: str, scene: dict) -> str:
         f'- {item["label"]} (confidence {item["confidence"]})'
         for item in scene["current_objects"]
     ) or "- nothing detected"
+    memory_context = "\n".join(f'- {item["content"]}' for item in scene.get("memories", [])) or "- no saved memories"
     payload = {
         "model": settings.ollama_model,
         "stream": False,
@@ -76,7 +77,7 @@ async def ask_ollama(prompt: str, scene: dict) -> str:
             f"You are {settings.name}, a concise local home-lab assistant.\n"
             f"Your personality is {settings.personality}.\n"
             f"Current camera detections:\n{context}\n"
-            f"Watch mode: {scene['watch_mode']}\nUser request: {prompt}"
+            f"Watch mode: {scene['watch_mode']}\nSaved user memories (use only when relevant):\n{memory_context}\nUser request: {prompt}"
         ),
     }
     try:

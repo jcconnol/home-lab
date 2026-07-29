@@ -336,7 +336,12 @@ async def chat(request: ChatRequest) -> dict:
         answer = weather_summary(await get_weather())
     elif message == "/help":
         answer = "Try /status, /weather, /what-do-you-see, /watch-room, /stop-watch, or ask a question."
+    elif any(term in message.lower() for term in ("what note", "saved note", "remembered")):
+        memories = state.memories
+        answer = "I have no saved notes." if not memories else "Saved notes:\n" + "\n".join(f"- {item['content']}" for item in memories)
     else:
-        answer = await ask_ollama(message, state.snapshot())
+        scene = state.snapshot()
+        scene["memories"] = list(state.memories)
+        answer = await ask_ollama(message, scene)
     return {"answer": answer, **state.snapshot()}
 
