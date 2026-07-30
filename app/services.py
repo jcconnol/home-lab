@@ -75,8 +75,9 @@ async def ask_ollama(prompt: str, scene: dict) -> str:
     payload = {
         "model": settings.ollama_model,
         "stream": False,
+        "think": False,
         "prompt": (
-            f"You are {settings.name}, a concise local home-lab assistant.\n"
+            f"You are {settings.name}, a concise local home-lab assistant. Answer the user's request directly. Do not narrate generation, emit progress updates, or provide unsolicited status reports.\n"
             f"Your personality is {settings.personality}.\n"
             f"Current camera detections:\n{context}\n"
             f"Watch mode: {scene['watch_mode']}\nSaved user memories (use only when relevant):\n{memory_context}\nUser request: {prompt}"
@@ -95,7 +96,7 @@ async def ask_ollama_stream(prompt: str, scene: dict) -> AsyncIterator[str]:
     """Yield Ollama response text as it is generated."""
     context = "\n".join(f'- {item["label"]} (confidence {item["confidence"]})' for item in scene["current_objects"]) or "- nothing detected"
     memory_context = "\n".join(f'- {item["content"]}' for item in scene.get("memories", [])) or "- no saved memories"
-    payload = {"model": settings.ollama_model, "stream": True, "prompt": f"You are {settings.name}, a concise local home-lab assistant.\nYour personality is {settings.personality}.\nCurrent camera detections:\n{context}\nWatch mode: {scene['watch_mode']}\nSaved user memories (use only when relevant):\n{memory_context}\nUser request: {prompt}"}
+    payload = {"model": settings.ollama_model, "stream": True, "think": False, "prompt": f"You are {settings.name}, a concise local home-lab assistant. Answer the user's request directly. Do not narrate generation, emit progress updates, or provide unsolicited status reports.\nYour personality is {settings.personality}.\nCurrent camera detections:\n{context}\nWatch mode: {scene['watch_mode']}\nSaved user memories (use only when relevant):\n{memory_context}\nUser request: {prompt}"}
     try:
         async with httpx.AsyncClient(timeout=60) as client:
             async with client.stream("POST", f"{settings.ollama_url}/api/generate", json=payload) as response:
