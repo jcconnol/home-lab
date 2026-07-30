@@ -104,7 +104,7 @@ async def ask_ollama_stream(prompt: str, scene: dict) -> AsyncIterator[str]:
                     if not line:
                         continue
                     try:
-                        text = _without_emojis(json.loads(line).get("response", ""))
+                        text = re.sub(r"[\U0001F000-\U0001FAFF\u2600-\u27BF]", "", json.loads(line).get("response", ""))
                     except (TypeError, ValueError):
                         continue
                     if text:
