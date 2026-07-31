@@ -198,6 +198,30 @@ Possible first features:
 
 The phone should be the primary companion-device prototype before custom wearable hardware is built.
 
+### Remote mobile companion (Level 4 — Hard)
+
+Provide a mobile app that can securely connect to this Grace instance from outside the home Wi-Fi so the owner can chat, save memories, and receive answers while away. Prefer an AWS-hosted relay or gateway when it simplifies deployment, but keep the tower private and allow other providers if they provide a clearer security or maintenance model.
+
+Requirements:
+
+- Use authenticated, encrypted connections with short-lived tokens and a revocable device list.
+- Keep the home server behind an outbound connection or deliberate tunnel rather than exposing an unauthenticated port.
+- Limit remote capabilities by default; require explicit approval for hardware controls and sensitive data.
+- Support offline queueing only for non-sensitive requests, with clear sync status.
+- Document AWS cost, secrets, logging, retention, and an easy disconnect/purge process.
+
+### Cat communicator (Level 4 — Hard)
+
+Let the owner send a voice memo from the phone to a speaker at home so the cat can hear it, with optional local playback confirmation. Start with one-way playback and avoid treating the feature as a reliable way to monitor or control an animal.
+
+Requirements:
+
+- Authenticate the phone and home receiver; do not expose the speaker directly to the internet.
+- Show whether the tower is online and whether playback completed.
+- Add a local volume limit, cooldown, and physical mute/stop control to avoid startling or distressing the cat.
+- Keep recordings local by default, set an automatic retention period, and provide delete/export controls.
+- Consider a later two-way audio mode only after privacy, echo, and animal-welfare testing.
+
 ### 3D-printed camera glasses
 
 Prototype lightweight 3D-printed glasses with a small camera and a phone connection so the user can interact with G.R.A.C.E. from a first-person view.

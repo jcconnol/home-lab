@@ -40,6 +40,11 @@ def _without_emojis(text: str) -> str:
     return re.sub(r"[\U0001F000-\U0001FAFF\u2600-\u27BF]", "", text).strip()
 
 
+def _without_thinking(text: str) -> str:
+    """Hide model reasoning blocks that may be returned despite think=false."""
+    return re.sub(r"<think>.*?</think>", "", text, flags=re.IGNORECASE | re.DOTALL)
+
+
 def detect_once(state: LabState) -> str:
     """Run one optional YOLO pass; leave the service usable without hardware."""
     try:
@@ -87,7 +92,7 @@ async def ask_ollama(prompt: str, scene: dict) -> str:
         async with httpx.AsyncClient(timeout=60) as client:
             response = await client.post(f"{settings.ollama_url}/api/generate", json=payload)
             response.raise_for_status()
-            return _without_emojis(response.json().get("response", "Ollama returned no response."))
+            return _without_thinking(_without_emojis(response.json().get("response", "Ollama returned no response.")))
     except (httpx.HTTPError, ValueError):
         return "The local language model is unavailable. Start Ollama or use the scene endpoints."
 
@@ -101,6 +106,8 @@ async def ask_ollama_stream(prompt: str, scene: dict) -> AsyncIterator[str]:
         async with httpx.AsyncClient(timeout=60) as client:
             async with client.stream("POST", f"{settings.ollama_url}/api/generate", json=payload) as response:
                 response.raise_for_status()
+                thinking = False
+                pending = ""
                 async for line in response.aiter_lines():
                     if not line:
                         continue
@@ -108,8 +115,28 @@ async def ask_ollama_stream(prompt: str, scene: dict) -> AsyncIterator[str]:
                         text = re.sub(r"[\U0001F000-\U0001FAFF\u2600-\u27BF]", "", json.loads(line).get("response", ""))
                     except (TypeError, ValueError):
                         continue
-                    if text:
-                        yield text
+                    if not text:
+                        continue
+                    pending += text
+                    visible = []
+                    while pending:
+                        marker = re.search(r"</?think>", pending, flags=re.IGNORECASE)
+                        if not marker:
+                            # Hold a possible partial marker until the next chunk.
+                            keep = min(len(pending), 8)
+                            if not thinking and len(pending) > keep:
+                                visible.append(pending[:-keep])
+                                pending = pending[-keep:]
+                            break
+                        before = pending[:marker.start()]
+                        if not thinking:
+                            visible.append(before)
+                        thinking = marker.group(0).startswith("<think")
+                        pending = pending[marker.end():]
+                    if visible:
+                        yield "".join(visible)
+                if pending and not thinking:
+                    yield pending
     except (httpx.HTTPError, ValueError):
         yield "The local language model is unavailable. Start Ollama or use the scene endpoints."
 
