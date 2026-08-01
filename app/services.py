@@ -53,6 +53,10 @@ def _without_thinking(text: str) -> str:
 def _clean_model_answer(text: str) -> str:
     """Return only the final answer when a model exposes its drafting process."""
     cleaned = _without_thinking(_without_emojis(text)).strip()
+    # Some Qwen builds emit a closing marker without the opening marker.
+    closing_marker = list(re.finditer(r"</think>", cleaned, flags=re.IGNORECASE))
+    if closing_marker:
+        cleaned = cleaned[closing_marker[-1].end():].strip()
     matches = list(re.finditer(r"(?im)^\s*(?:final\s+answer|answer)\s*:\s*", cleaned))
     if matches:
         cleaned = cleaned[matches[-1].end():].strip().strip('"')
