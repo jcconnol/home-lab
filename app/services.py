@@ -117,7 +117,12 @@ async def ask_ollama_stream(prompt: str, scene: dict) -> AsyncIterator[str]:
                     if not line:
                         continue
                     try:
-                        text = re.sub(r"[\U0001F000-\U0001FAFF\u2600-\u27BF]", "", json.loads(line).get("response", ""))
+                        chunk = json.loads(line)
+                        # Newer Ollama/Qwen streams can put reasoning in a
+                        # separate `thinking` field even when think=false.
+                        if chunk.get("thinking"):
+                            continue
+                        text = re.sub(r"[\U0001F000-\U0001FAFF\u2600-\u27BF]", "", chunk.get("response", ""))
                     except (TypeError, ValueError):
                         continue
                     if not text:
