@@ -26,7 +26,7 @@ class Settings:
     tts_enabled: bool = os.getenv("GRACE_TTS_ENABLED", "false").lower() == "true"
     personality: str = os.getenv(
         "GRACE_PERSONALITY",
-        "funny, dry-witted, calm, capable, technically clear, and honest about uncertainty; never use emojis",
+        "composed, highly competent, discreet, quietly confident, warm but formal, subtly dry-witted, and honest about uncertainty; never use emojis",
     )
     weather_location: str = os.getenv("GRACE_WEATHER_LOCATION", "Home")
     weather_latitude: float = float(os.getenv("GRACE_WEATHER_LATITUDE", "0"))

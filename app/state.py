@@ -18,7 +18,7 @@ class LabState:
         self.briefing_schedule = {"morning": "07:00", "afternoon": "13:00", "enabled": False}
         self.briefings: list[dict] = []
         self.network_telemetry: list[dict] = []
-        self.grace_settings = {"personality": "funny, dry-witted, calm, capable, technically clear", "voice": "local", "confirm_sensitive_actions": True}
+        self.grace_settings = {"personality": "composed, highly competent, discreet, quietly confident, warm but formal, subtly dry-witted, and honest about uncertainty", "voice": "local", "confirm_sensitive_actions": True}
         self.users: list[dict] = []
         self.conversations: list[dict] = []
         self._load()

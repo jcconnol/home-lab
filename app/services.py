@@ -11,6 +11,11 @@ from .state import LabState
 
 
 _weather_cache: tuple[float, dict] | None = None
+_ASSISTANT_STYLE = (
+    "Be composed, highly competent, discreet, and quietly confident, like a refined cinematic household assistant. "
+    "Use formal but warm language, subtle dry wit only when it helps, concise answers, and practical next steps. "
+    "Never pretend certainty, never be theatrical, and never claim to have performed an action you did not perform."
+)
 _WEATHER_CODES = {
     0: "clear sky",
     1: "mainly clear",
@@ -83,7 +88,7 @@ async def ask_ollama(prompt: str, scene: dict) -> str:
         "think": False,
         "prompt": (
             f"You are {settings.name}, a concise local home-lab assistant. Answer the user's request directly. Do not narrate generation, emit progress updates, or provide unsolicited status reports.\n"
-            f"Your personality is {settings.personality}.\n"
+            f"Your personality is {settings.personality}.\nBehavior guidance: {_ASSISTANT_STYLE}\n"
             f"Current camera detections:\n{context}\n"
             f"Watch mode: {scene['watch_mode']}\nSaved user memories (use only when relevant):\n{memory_context}\nUser request: {prompt}"
         ),
@@ -101,7 +106,7 @@ async def ask_ollama_stream(prompt: str, scene: dict) -> AsyncIterator[str]:
     """Yield Ollama response text as it is generated."""
     context = "\n".join(f'- {item["label"]} (confidence {item["confidence"]})' for item in scene["current_objects"]) or "- nothing detected"
     memory_context = "\n".join(f'- {item["content"]}' for item in scene.get("memories", [])) or "- no saved memories"
-    payload = {"model": settings.ollama_model, "stream": True, "think": False, "prompt": f"You are {settings.name}, a concise local home-lab assistant. Answer the user's request directly. Do not narrate generation, emit progress updates, or provide unsolicited status reports.\nYour personality is {settings.personality}.\nCurrent camera detections:\n{context}\nWatch mode: {scene['watch_mode']}\nSaved user memories (use only when relevant):\n{memory_context}\nUser request: {prompt}"}
+    payload = {"model": settings.ollama_model, "stream": True, "think": False, "prompt": f"You are {settings.name}, a concise local home-lab assistant. Answer the user's request directly. Do not narrate generation, emit progress updates, or provide unsolicited status reports.\nYour personality is {settings.personality}.\nBehavior guidance: {_ASSISTANT_STYLE}\nCurrent camera detections:\n{context}\nWatch mode: {scene['watch_mode']}\nSaved user memories (use only when relevant):\n{memory_context}\nUser request: {prompt}"}
     try:
         async with httpx.AsyncClient(timeout=60) as client:
             async with client.stream("POST", f"{settings.ollama_url}/api/generate", json=payload) as response:
