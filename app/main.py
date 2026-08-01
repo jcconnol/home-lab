@@ -6,6 +6,8 @@ import base64
 import hashlib
 import hmac
 import secrets
+import uuid
+import httpx
 from datetime import datetime, timezone
 
 from fastapi import FastAPI, HTTPException, Request
@@ -60,7 +62,19 @@ class SignupRequest(BaseModel):
     password: str
 
 
+class ImageGenerateRequest(BaseModel):
+    prompt: str
+    negative_prompt: str = "blurry, low quality, distorted, text, watermark"
+
+
+class ImageSaveRequest(BaseModel):
+    image_base64: str
+    prompt: str = ""
+
+
 SESSIONS: dict[str, dict] = {}
+COMFY_URL = "http://127.0.0.1:8188"
+IMAGE_DIR = Path(__file__).parent / "generated_images"
 
 
 def _hash_password(password: str) -> str:
@@ -326,6 +340,95 @@ def network_telemetry() -> dict:
 @app.get("/api/music")
 def music() -> dict:
     return {"available": False, "provider": "local-command-adapter", "message": "Playback commands are ready; configure a speaker provider to produce audio.", **state.music}
+
+
+def _image_workflow(prompt: str, negative_prompt: str) -> dict:
+    return {
+        "1": {"class_type": "CheckpointLoaderSimple", "inputs": {"ckpt_name": "v1-5-pruned-emaonly.safetensors"}},
+        "2": {"class_type": "CLIPTextEncode", "inputs": {"text": prompt, "clip": ["1", 1]}},
+        "3": {"class_type": "CLIPTextEncode", "inputs": {"text": negative_prompt, "clip": ["1", 1]}},
+        "4": {"class_type": "EmptyLatentImage", "inputs": {"width": 512, "height": 512, "batch_size": 1}},
+        "5": {"class_type": "KSampler", "inputs": {"seed": secrets.randbits(63), "steps": 24, "cfg": 7.0, "sampler_name": "euler", "scheduler": "normal", "denoise": 1.0, "model": ["1", 0], "positive": ["2", 0], "negative": ["3", 0], "latent_image": ["4", 0]}},
+        "6": {"class_type": "VAEDecode", "inputs": {"samples": ["5", 0], "vae": ["1", 2]}},
+        "7": {"class_type": "PreviewImage", "inputs": {"images": ["6", 0]}},
+    }
+
+
+async def _generate_image(prompt: str, negative_prompt: str) -> dict:
+    async with httpx.AsyncClient(base_url=COMFY_URL, timeout=30) as client:
+        queued = await client.post("/prompt", json={"prompt": _image_workflow(prompt, negative_prompt), "client_id": uuid.uuid4().hex})
+        queued.raise_for_status()
+        prompt_id = queued.json().get("prompt_id")
+        if not prompt_id:
+            raise RuntimeError("ComfyUI did not return a prompt id.")
+        for _ in range(180):
+            await asyncio.sleep(1)
+            history = (await client.get(f"/history/{prompt_id}")).json().get(prompt_id)
+            if not history:
+                continue
+            for output in history.get("outputs", {}).values():
+                for image in output.get("images", []):
+                    content = await client.get("/view", params={"filename": image["filename"], "subfolder": image.get("subfolder", ""), "type": image.get("type", "temp")})
+                    content.raise_for_status()
+                    return {"image_base64": base64.b64encode(content.content).decode("ascii"), "mime_type": "image/png", "prompt": prompt}
+        raise TimeoutError("ComfyUI did not finish the image within three minutes.")
+
+
+@app.get("/api/images/saved")
+def saved_images(request: Request) -> dict:
+    require_user(request)
+    return {"images": list(reversed(state.saved_images))}
+
+
+@app.post("/api/images/generate")
+async def generate_image(request: ImageGenerateRequest, http_request: Request) -> dict:
+    require_user(http_request)
+    if not request.prompt.strip():
+        raise HTTPException(status_code=400, detail="Prompt is required.")
+    try:
+        return await _generate_image(request.prompt.strip(), request.negative_prompt.strip())
+    except (httpx.HTTPError, RuntimeError, TimeoutError) as error:
+        raise HTTPException(status_code=502, detail=f"Image generation unavailable: {error}") from error
+
+
+@app.post("/api/images/save")
+def save_image(request: ImageSaveRequest, http_request: Request) -> dict:
+    require_user(http_request)
+    try:
+        raw = base64.b64decode(request.image_base64, validate=True)
+    except (ValueError, TypeError):
+        raise HTTPException(status_code=400, detail="Invalid image data.")
+    if len(raw) > 20 * 1024 * 1024:
+        raise HTTPException(status_code=413, detail="Image is too large.")
+    IMAGE_DIR.mkdir(exist_ok=True)
+    image_id = uuid.uuid4().hex
+    filename = f"{image_id}.png"
+    (IMAGE_DIR / filename).write_bytes(raw)
+    item = {"id": image_id, "filename": filename, "prompt": request.prompt, "created_at": datetime.now(timezone.utc).isoformat()}
+    return {"image": state.add_saved_image(item)}
+
+
+@app.get("/api/images/saved/{filename}")
+def saved_image_file(filename: str, request: Request) -> FileResponse:
+    require_user(request)
+    if Path(filename).name != filename or not filename.endswith(".png"):
+        raise HTTPException(status_code=404, detail="Image not found.")
+    path = IMAGE_DIR / filename
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail="Image not found.")
+    return FileResponse(path, media_type="image/png")
+
+
+@app.delete("/api/images/saved/{image_id}")
+def delete_saved_image(image_id: str, request: Request) -> dict:
+    require_user(request)
+    item = next((entry for entry in state.saved_images if entry["id"] == image_id), None)
+    if not item or not state.remove_saved_image(image_id):
+        raise HTTPException(status_code=404, detail="Image not found.")
+    path = IMAGE_DIR / item["filename"]
+    if path.is_file():
+        path.unlink()
+    return {"deleted": True}
 
 
 @app.post("/api/music/command")

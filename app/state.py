@@ -21,12 +21,13 @@ class LabState:
         self.grace_settings = {"personality": "composed, highly competent, discreet, quietly confident, warm but formal, subtly dry-witted, and honest about uncertainty", "voice": "local", "confirm_sensitive_actions": True}
         self.users: list[dict] = []
         self.conversations: list[dict] = []
+        self.saved_images: list[dict] = []
         self._load()
 
     def _load(self) -> None:
         try:
             data = json.loads(self._data_file.read_text(encoding="utf-8"))
-            for key in ("music", "memories", "preferences", "briefing_schedule", "briefings", "network_telemetry", "grace_settings", "users", "conversations"):
+            for key in ("music", "memories", "preferences", "briefing_schedule", "briefings", "network_telemetry", "grace_settings", "users", "conversations", "saved_images"):
                 if key in data:
                     setattr(self, key, data[key])
             self.music.setdefault("shuffle", False)
@@ -36,7 +37,7 @@ class LabState:
             pass
 
     def _save(self) -> None:
-        payload = {key: getattr(self, key) for key in ("music", "memories", "preferences", "briefing_schedule", "briefings", "network_telemetry", "grace_settings", "users", "conversations")}
+        payload = {key: getattr(self, key) for key in ("music", "memories", "preferences", "briefing_schedule", "briefings", "network_telemetry", "grace_settings", "users", "conversations", "saved_images")}
         try:
             self._data_file.write_text(json.dumps(payload, indent=2), encoding="utf-8")
         except OSError:
@@ -77,6 +78,20 @@ class LabState:
     def record_network(self, summary: dict) -> None:
         with self._lock:
             self.network_telemetry.append(summary); self.network_telemetry = self.network_telemetry[-50:]; self._save()
+
+    def add_saved_image(self, item: dict) -> dict:
+        with self._lock:
+            self.saved_images.append(item)
+            self.saved_images = self.saved_images[-100:]
+            self._save()
+            return dict(item)
+
+    def remove_saved_image(self, image_id: str) -> bool:
+        with self._lock:
+            old = len(self.saved_images)
+            self.saved_images = [item for item in self.saved_images if item["id"] != image_id]
+            self._save()
+            return len(self.saved_images) != old
 
     def add_user(self, user: dict) -> None:
         with self._lock:
