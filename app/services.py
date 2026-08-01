@@ -50,6 +50,15 @@ def _without_thinking(text: str) -> str:
     return re.sub(r"<think>.*?</think>", "", text, flags=re.IGNORECASE | re.DOTALL)
 
 
+def _clean_model_answer(text: str) -> str:
+    """Return only the final answer when a model exposes its drafting process."""
+    cleaned = _without_thinking(_without_emojis(text)).strip()
+    matches = list(re.finditer(r"(?im)^\s*(?:final\s+answer|answer)\s*:\s*", cleaned))
+    if matches:
+        cleaned = cleaned[matches[-1].end():].strip().strip('"')
+    return cleaned
+
+
 def detect_once(state: LabState) -> str:
     """Run one optional YOLO pass; leave the service usable without hardware."""
     try:
@@ -97,13 +106,13 @@ async def ask_ollama(prompt: str, scene: dict) -> str:
         async with httpx.AsyncClient(timeout=60) as client:
             response = await client.post(f"{settings.ollama_url}/api/generate", json=payload)
             response.raise_for_status()
-            return _without_thinking(_without_emojis(response.json().get("response", "Ollama returned no response.")))
+            return _clean_model_answer(response.json().get("response", "Ollama returned no response."))
     except (httpx.HTTPError, ValueError):
         return "The local language model is unavailable. Start Ollama or use the scene endpoints."
 
 
 async def ask_ollama_stream(prompt: str, scene: dict) -> AsyncIterator[str]:
-    """Yield Ollama response text as it is generated."""
+    """Yield one cleaned response after Ollama finishes generating it."""
     context = "\n".join(f'- {item["label"]} (confidence {item["confidence"]})' for item in scene["current_objects"]) or "- nothing detected"
     memory_context = "\n".join(f'- {item["content"]}' for item in scene.get("memories", [])) or "- no saved memories"
     payload = {"model": settings.ollama_model, "stream": True, "think": False, "prompt": f"You are {settings.name}, a concise local home-lab assistant. Answer the user's request directly. Do not narrate generation, emit progress updates, or provide unsolicited status reports.\nYour personality is {settings.personality}.\nBehavior guidance: {_ASSISTANT_STYLE}\nCurrent camera detections:\n{context}\nWatch mode: {scene['watch_mode']}\nSaved user memories (use only when relevant):\n{memory_context}\nUser request: {prompt}"}
@@ -111,8 +120,7 @@ async def ask_ollama_stream(prompt: str, scene: dict) -> AsyncIterator[str]:
         async with httpx.AsyncClient(timeout=60) as client:
             async with client.stream("POST", f"{settings.ollama_url}/api/generate", json=payload) as response:
                 response.raise_for_status()
-                thinking = False
-                pending = ""
+                raw_parts: list[str] = []
                 async for line in response.aiter_lines():
                     if not line:
                         continue
@@ -127,26 +135,12 @@ async def ask_ollama_stream(prompt: str, scene: dict) -> AsyncIterator[str]:
                         continue
                     if not text:
                         continue
-                    pending += text
-                    visible = []
-                    while pending:
-                        marker = re.search(r"</?think>", pending, flags=re.IGNORECASE)
-                        if not marker:
-                            # Hold a possible partial marker until the next chunk.
-                            keep = min(len(pending), 8)
-                            if not thinking and len(pending) > keep:
-                                visible.append(pending[:-keep])
-                                pending = pending[-keep:]
-                            break
-                        before = pending[:marker.start()]
-                        if not thinking:
-                            visible.append(before)
-                        thinking = marker.group(0).startswith("<think")
-                        pending = pending[marker.end():]
-                    if visible:
-                        yield "".join(visible)
-                if pending and not thinking:
-                    yield pending
+                    raw_parts.append(text)
+                # Do not stream raw Qwen output: if it ignores think=false and
+                # drafts in ordinary text, the browser cannot retract it later.
+                answer = _clean_model_answer("".join(raw_parts))
+                if answer:
+                    yield answer
     except (httpx.HTTPError, ValueError):
         yield "The local language model is unavailable. Start Ollama or use the scene endpoints."
 
