@@ -31,7 +31,21 @@ The ideas below remain grouped by domain for readability. This ranking orders ev
 
 ## Newly requested ideas
 
-### Grace settings home page (Level 2 — Moderate)
+### Voice conversation (Level 2 - Moderate)
+
+Let the user talk to Grace from the phone and hear Grace's response without typing. Start with an explicit push-to-talk control in the mobile web app/PWA: capture a short voice message, convert it to text, send the text through the existing Grace chat flow, and play Grace's response using text-to-speech.
+
+Requirements:
+
+- Keep microphone access opt-in and visibly indicate recording, processing, and playback states.
+- Do not enable continuous listening or wake-word detection as part of this feature.
+- Prefer local/browser speech recognition and synthesis where supported; provide a clear fallback when a phone or browser does not support them.
+- Preserve the same conversation history and authentication rules as typed chat.
+- Keep recordings transient by default, do not retain raw audio unless explicitly enabled, and provide a stop/mute control.
+- Allow voice playback to be disabled or interrupted at any time.
+- Let the user choose whether Grace speaks through the device that captured the request or through configured computer speakers; show the active output destination and require explicit opt-in before routing audio to another device.
+
+### Grace settings home page (Level 2 - Moderate)
 
 Add a dedicated home page where the user can review and edit Grace's personality, response style, preferred name, enabled capabilities, privacy defaults, and connected integrations. Changes should be previewable, validated, and saved locally. Sensitive settings should require confirmation, and the page should show the current configuration, reset controls, and an audit trail of changes.
 
