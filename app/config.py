@@ -22,7 +22,7 @@ class Settings:
     )
     yolo_model: str = os.getenv("GRACE_YOLO_MODEL", "yolo11n.pt")
     ollama_url: str = os.getenv("GRACE_OLLAMA_URL", "http://127.0.0.1:11434")
-    ollama_model: str = os.getenv("GRACE_OLLAMA_MODEL", "qwen3:4b")
+    ollama_model: str = os.getenv("GRACE_OLLAMA_MODEL", "qwen3:4b-instruct")
     tts_enabled: bool = os.getenv("GRACE_TTS_ENABLED", "false").lower() == "true"
     personality: str = os.getenv(
         "GRACE_PERSONALITY",
@@ -32,6 +32,10 @@ class Settings:
     weather_latitude: float = float(os.getenv("GRACE_WEATHER_LATITUDE", "0"))
     weather_longitude: float = float(os.getenv("GRACE_WEATHER_LONGITUDE", "0"))
     weather_cache_seconds: int = int(os.getenv("GRACE_WEATHER_CACHE_SECONDS", "900"))
+    home_assistant_url: str = os.getenv("GRACE_HOME_ASSISTANT_URL", "").rstrip("/")
+    home_assistant_token: str = os.getenv("GRACE_HOME_ASSISTANT_TOKEN", "")
+    smart_switch_entity_id: str = os.getenv("GRACE_SMART_SWITCH_ENTITY_ID", "")
+    smart_switch_name: str = os.getenv("GRACE_SMART_SWITCH_NAME", "Zigbee Smart Switch Gen 3")
     admin_username: str = os.getenv("GRACE_ADMIN_USERNAME", "admin")
     admin_password_hash: str = os.getenv("GRACE_ADMIN_PASSWORD_HASH", "")
 

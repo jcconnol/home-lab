@@ -2,6 +2,13 @@
 
 This file is a living list of future capabilities. Ideas should be promoted into a dated specification only when the hardware, safety model, and privacy boundaries are clear.
 
+## First priority ideas
+
+1. **[Authentication-first UI refactor](UI_REFACTOR.md)** — require sign-in before showing app content, persist secure long-lived sessions across server restarts, and present a role-aware dashboard containing only the features each user may access.
+
+2. **IR TV and Apple TV control** — add an IR sensor/transmitter pointed at the TV and Apple TV so the user can log into Grace from a phone, press controls in the app, and have Grace control common media and power functions.
+3. **Standalone wearable Grace controller** — explore a watch, armband, or similar phone-independent device for quick Grace interactions, potentially including gesture controls, a physical action button, microphone, and audio or haptic feedback.
+
 ## Difficulty-ranked backlog
 
 The ideas below remain grouped by domain for readability. This ranking orders every idea from easiest to most difficult based on the effort to deliver a safe, private, reliable home-lab version (not merely a prototype).
@@ -20,12 +27,12 @@ The ideas below remain grouped by domain for readability. This ranking orders ev
 
 13. **Private personal phone app** — a secure mobile client, push/voice features, and remote access.
 14. **Voice identity guardrail** — speaker verification plus reliable second-factor and permission workflows.
-15. **Wrist tool** — companion-device or custom-hardware integration with audio, display, battery, and controls.
+15. **Spatial wrist-mount home-lab controller** — a companion-device or custom-hardware integration with a wrist-mounted display, spatial interaction, audio, battery, and physical controls for operating G.R.A.C.E. around the lab.
 16. **Remote manual drone control** — secure remote control, video, loss-of-connection failsafes, and physical safety.
 
 ### Level 5 — Very hard
 
-17. **3D-printed camera glasses** — comfortable custom hardware, camera/phone integration, and privacy indicators.
+17. **Integrated camera/display glasses** — comfortable 3D-printed frames combining a camera, an ESP32 controller, and a monocular waveguide optics module, with phone integration and clear privacy indicators.
 18. **Controlled self-improvement** — sandboxing, approval gates, testing, secure rollback, and strict safety boundaries.
 19. **Autonomous indoor drone** — indoor localization, obstacle avoidance, docking, reliable autonomy, and high safety risk.
 
@@ -158,7 +165,7 @@ Requirements:
 
 ### Wrist tool
 
-Build a wrist-worn interface with a microphone, speaker or bone-conduction output, a small display, and a physical mute/action control.
+Build a spatial wrist-mounted home-lab controller with a microphone, speaker or bone-conduction output, a small display, and physical mute/action controls. It should provide quick access to G.R.A.C.E. status, nearby devices, camera views, and lab routines without requiring a phone.
 
 Potential interactions:
 
@@ -168,6 +175,29 @@ Potential interactions:
 - Locate the phone, ask for a room view, or control music.
 
 Start with a phone or smartwatch companion prototype before building custom hardware.
+
+Possible spatial interactions:
+
+- Point, tap, or use a gesture to select a nearby device or dashboard panel.
+- Show directional prompts for rooms, tools, alerts, or the drone's location.
+- Use a physical action button and visible screen state for confirmation of hardware actions.
+
+### Workshop VR helmet
+
+Design and 3D-print a workshop helmet or protective headgear that integrates VR or mixed-reality viewing with other lab interfaces.
+
+Possible capabilities:
+
+- Hands-free access to G.R.A.C.E. status, instructions, timers, and camera views.
+- Optional passthrough or visor display for overlays while working at the bench.
+- Voice, gesture, or wrist-controller interaction with a physical emergency/mute control.
+- Modular mounts for lighting, audio, tracking, or other sensors without obstructing safety equipment.
+
+Safety requirements:
+
+- Do not compromise impact, electrical, respiratory, or eye protection for electronics or 3D-printed mounts.
+- Keep overlays unobtrusive and provide an immediate clear-vision mode.
+- Start with a removable non-protective prototype before attaching anything to certified protective equipment.
 
 ## Personal health and fitness
 
@@ -236,15 +266,21 @@ Requirements:
 - Keep recordings local by default, set an automatic retention period, and provide delete/export controls.
 - Consider a later two-way audio mode only after privacy, echo, and animal-welfare testing.
 
-### 3D-printed camera glasses
+### Integrated glasses with waveguide display
 
-Prototype lightweight 3D-printed glasses with a small camera and a phone connection so the user can interact with G.R.A.C.E. from a first-person view.
+Prototype lightweight 3D-printed frames with a small camera, an ESP32 controller, and a monocular waveguide optics module so the user can interact with G.R.A.C.E. from a first-person view.
 
 Possible flow:
 
 1. The glasses camera sends a still image or short clip to the phone.
 2. The phone handles connectivity, privacy controls, and local processing.
 3. G.R.A.C.E. answers through the phone, earbuds, or a small glasses speaker.
+
+Hardware direction:
+
+- Use the ESP32 for low-power controls, status, sensor input, and communication with the phone.
+- Keep image processing and heavier computation on the phone or local home-lab server.
+- Treat the waveguide as a monocular notification and prompt display rather than a full-vision replacement.
 
 Early prototypes should use a removable camera module, physical privacy shutter or disconnect, visible recording indicator, comfortable low-voltage components, and phone-side processing. Avoid continuous recording by default and clearly indicate when an image is being analyzed.
 

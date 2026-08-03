@@ -99,15 +99,18 @@ async def ask_ollama(prompt: str, scene: dict) -> str:
         "model": settings.ollama_model,
         "stream": False,
         "think": False,
+        "keep_alive": "30m",
         "prompt": (
             f"You are {settings.name}, a concise local home-lab assistant. Answer the user's request directly. Do not narrate generation, emit progress updates, or provide unsolicited status reports.\n"
-            f"Your personality is {settings.personality}.\nBehavior guidance: {_ASSISTANT_STYLE}\n"
+            f"Your personality is {scene.get('grace_settings', {}).get('personality', settings.personality)}. "
+            f"Humor is {scene.get('grace_settings', {}).get('humor', 'balanced')}; use either a direct or characterful response as fits the moment, not a mandatory status-and-joke pair. "
+            f"Always be serious for warnings, security, and sensitive actions.\nBehavior guidance: {_ASSISTANT_STYLE}\n"
             f"Current camera detections:\n{context}\n"
             f"Watch mode: {scene['watch_mode']}\nSaved user memories (use only when relevant):\n{memory_context}\nUser request: {prompt}"
         ),
     }
     try:
-        async with httpx.AsyncClient(timeout=60) as client:
+        async with httpx.AsyncClient(timeout=httpx.Timeout(300, connect=10)) as client:
             response = await client.post(f"{settings.ollama_url}/api/generate", json=payload)
             response.raise_for_status()
             return _clean_model_answer(response.json().get("response", "Ollama returned no response."))
@@ -116,15 +119,15 @@ async def ask_ollama(prompt: str, scene: dict) -> str:
 
 
 async def ask_ollama_stream(prompt: str, scene: dict) -> AsyncIterator[str]:
-    """Yield one cleaned response after Ollama finishes generating it."""
+    """Yield visible response chunks as Ollama generates them."""
     context = "\n".join(f'- {item["label"]} (confidence {item["confidence"]})' for item in scene["current_objects"]) or "- nothing detected"
     memory_context = "\n".join(f'- {item["content"]}' for item in scene.get("memories", [])) or "- no saved memories"
-    payload = {"model": settings.ollama_model, "stream": True, "think": False, "prompt": f"You are {settings.name}, a concise local home-lab assistant. Answer the user's request directly. Do not narrate generation, emit progress updates, or provide unsolicited status reports.\nYour personality is {settings.personality}.\nBehavior guidance: {_ASSISTANT_STYLE}\nCurrent camera detections:\n{context}\nWatch mode: {scene['watch_mode']}\nSaved user memories (use only when relevant):\n{memory_context}\nUser request: {prompt}"}
+    personality = scene.get("grace_settings", {})
+    payload = {"model": settings.ollama_model, "stream": True, "think": False, "keep_alive": "30m", "prompt": f"You are {settings.name}, a concise local home-lab assistant. Answer the user's request directly. Do not narrate generation, emit progress updates, or provide unsolicited status reports.\nYour personality is {personality.get('personality', settings.personality)}. Humor is {personality.get('humor', 'balanced')}; use either a direct or characterful response as fits the moment, not a mandatory status-and-joke pair. Always be serious for warnings, security, and sensitive actions. Formality is {personality.get('formality', 'polished')} and response length is {personality.get('response_length', 'standard')}.\nBehavior guidance: {_ASSISTANT_STYLE}\nCurrent camera detections:\n{context}\nWatch mode: {scene['watch_mode']}\nSaved user memories (use only when relevant):\n{memory_context}\nUser request: {prompt}"}
     try:
-        async with httpx.AsyncClient(timeout=60) as client:
+        async with httpx.AsyncClient(timeout=httpx.Timeout(300, connect=10)) as client:
             async with client.stream("POST", f"{settings.ollama_url}/api/generate", json=payload) as response:
                 response.raise_for_status()
-                raw_parts: list[str] = []
                 async for line in response.aiter_lines():
                     if not line:
                         continue
@@ -139,12 +142,7 @@ async def ask_ollama_stream(prompt: str, scene: dict) -> AsyncIterator[str]:
                         continue
                     if not text:
                         continue
-                    raw_parts.append(text)
-                # Do not stream raw Qwen output: if it ignores think=false and
-                # drafts in ordinary text, the browser cannot retract it later.
-                answer = _clean_model_answer("".join(raw_parts))
-                if answer:
-                    yield answer
+                    yield text
     except (httpx.HTTPError, ValueError):
         yield "The local language model is unavailable. Start Ollama or use the scene endpoints."
 
@@ -189,6 +187,70 @@ async def get_weather(force_refresh: bool = False) -> dict:
         return result
     except (httpx.HTTPError, KeyError, TypeError, ValueError):
         return {"available": False, "error": "Weather is temporarily unavailable."}
+
+
+def _smart_switch_configured() -> bool:
+    return bool(
+        settings.home_assistant_url
+        and settings.home_assistant_token
+        and settings.smart_switch_entity_id.startswith("switch.")
+    )
+
+
+async def get_smart_switch() -> dict:
+    """Read the configured switch state through Home Assistant's local API."""
+    if not _smart_switch_configured():
+        return {
+            "available": False,
+            "name": settings.smart_switch_name,
+            "state": "unavailable",
+            "message": "Configure the Home Assistant URL, token, and switch entity ID in .env.",
+        }
+    headers = {"Authorization": f"Bearer {settings.home_assistant_token}"}
+    try:
+        async with httpx.AsyncClient(timeout=10) as client:
+            response = await client.get(
+                f"{settings.home_assistant_url}/api/states/{settings.smart_switch_entity_id}",
+                headers=headers,
+            )
+            response.raise_for_status()
+            payload = response.json()
+        return {
+            "available": payload.get("state") in {"on", "off"},
+            "name": payload.get("attributes", {}).get("friendly_name") or settings.smart_switch_name,
+            "state": payload.get("state", "unavailable"),
+            "message": "Connected through Home Assistant.",
+        }
+    except (httpx.HTTPError, TypeError, ValueError):
+        return {
+            "available": False,
+            "name": settings.smart_switch_name,
+            "state": "unavailable",
+            "message": "Home Assistant or the configured switch is unavailable.",
+        }
+
+
+async def toggle_smart_switch() -> dict:
+    """Toggle the configured switch, then return its confirmed state."""
+    if not _smart_switch_configured():
+        return await get_smart_switch()
+    headers = {"Authorization": f"Bearer {settings.home_assistant_token}"}
+    try:
+        async with httpx.AsyncClient(timeout=10) as client:
+            response = await client.post(
+                f"{settings.home_assistant_url}/api/services/switch/toggle",
+                headers=headers,
+                json={"entity_id": settings.smart_switch_entity_id},
+            )
+            response.raise_for_status()
+    except httpx.HTTPError:
+        return {
+            "available": False,
+            "name": settings.smart_switch_name,
+            "state": "unavailable",
+            "message": "Home Assistant could not toggle the switch.",
+        }
+    return await get_smart_switch()
 
 
 def weather_summary(weather: dict) -> str:

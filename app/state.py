@@ -18,8 +18,9 @@ class LabState:
         self.briefing_schedule = {"morning": "07:00", "afternoon": "13:00", "enabled": False}
         self.briefings: list[dict] = []
         self.network_telemetry: list[dict] = []
-        self.grace_settings = {"personality": "composed, highly competent, discreet, quietly confident, warm but formal, subtly dry-witted, and honest about uncertainty", "voice": "local", "confirm_sensitive_actions": True}
+        self.grace_settings = {"personality": "composed, highly competent, discreet, quietly confident, warm but formal, subtly dry-witted, and honest about uncertainty", "voice": "local", "humor": "balanced", "formality": "polished", "response_length": "standard", "proactive_comments": "occasionally", "confirm_sensitive_actions": True}
         self.users: list[dict] = []
+        self.sessions: list[dict] = []
         self.conversations: list[dict] = []
         self.saved_images: list[dict] = []
         self._load()
@@ -27,17 +28,21 @@ class LabState:
     def _load(self) -> None:
         try:
             data = json.loads(self._data_file.read_text(encoding="utf-8"))
-            for key in ("music", "memories", "preferences", "briefing_schedule", "briefings", "network_telemetry", "grace_settings", "users", "conversations", "saved_images"):
+            for key in ("music", "memories", "preferences", "briefing_schedule", "briefings", "network_telemetry", "grace_settings", "users", "sessions", "conversations", "saved_images"):
                 if key in data:
                     setattr(self, key, data[key])
             self.music.setdefault("shuffle", False)
             self.music.setdefault("queue", ["Ambient Systems", "Morning Circuit", "Quiet Focus"])
             self.music.setdefault("index", 0)
+            self.grace_settings.setdefault("humor", "balanced")
+            self.grace_settings.setdefault("formality", "polished")
+            self.grace_settings.setdefault("response_length", "standard")
+            self.grace_settings.setdefault("proactive_comments", "occasionally")
         except (OSError, ValueError, TypeError):
             pass
 
     def _save(self) -> None:
-        payload = {key: getattr(self, key) for key in ("music", "memories", "preferences", "briefing_schedule", "briefings", "network_telemetry", "grace_settings", "users", "conversations", "saved_images")}
+        payload = {key: getattr(self, key) for key in ("music", "memories", "preferences", "briefing_schedule", "briefings", "network_telemetry", "grace_settings", "users", "sessions", "conversations", "saved_images")}
         try:
             self._data_file.write_text(json.dumps(payload, indent=2), encoding="utf-8")
         except OSError:
