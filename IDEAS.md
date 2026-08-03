@@ -268,7 +268,9 @@ Requirements:
 
 ### Integrated glasses with waveguide display
 
-Prototype lightweight 3D-printed frames with a small camera, an ESP32 controller, and a monocular waveguide optics module so the user can interact with G.R.A.C.E. from a first-person view.
+Prototype lightweight 3D-printed frames with a small camera and a simple, single-color monocular HUD so the user can interact with G.R.A.C.E. from a first-person view. The display path would be:
+
+`Raspberry Pi or phone → display driver board → single-color micro-OLED → collimating lens → waveguide or mirror → eye`
 
 Possible flow:
 
@@ -278,9 +280,10 @@ Possible flow:
 
 Hardware direction:
 
-- Use the ESP32 for low-power controls, status, sensor input, and communication with the phone.
-- Keep image processing and heavier computation on the phone or local home-lab server.
-- Treat the waveguide as a monocular notification and prompt display rather than a full-vision replacement.
+- Use the phone or a Raspberry Pi as the display source and application processor, depending on the prototype's size, power, and connectivity requirements.
+- Use a dedicated driver board between the source device and the micro-OLED; keep the display intentionally single-color to reduce optical and software complexity.
+- Route the emitted image through a collimating lens and then into a waveguide or mirror combiner positioned in front of one eye.
+- Treat the optical system as a monocular notification and prompt display rather than a full-vision replacement.
 
 Early prototypes should use a removable camera module, physical privacy shutter or disconnect, visible recording indicator, comfortable low-voltage components, and phone-side processing. Avoid continuous recording by default and clearly indicate when an image is being analyzed.
 
