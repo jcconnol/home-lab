@@ -32,12 +32,17 @@ class Settings:
     weather_latitude: float = float(os.getenv("GRACE_WEATHER_LATITUDE", "0"))
     weather_longitude: float = float(os.getenv("GRACE_WEATHER_LONGITUDE", "0"))
     weather_cache_seconds: int = int(os.getenv("GRACE_WEATHER_CACHE_SECONDS", "900"))
-    home_assistant_url: str = os.getenv("GRACE_HOME_ASSISTANT_URL", "").rstrip("/")
+    home_assistant_url: str = "http://homeassistant.local"
     home_assistant_token: str = os.getenv("GRACE_HOME_ASSISTANT_TOKEN", "")
+    home_assistant_cache_seconds: int = int(
+        os.getenv("GRACE_HOME_ASSISTANT_CACHE_SECONDS", "14400")
+    )
     smart_switch_entity_id: str = os.getenv("GRACE_SMART_SWITCH_ENTITY_ID", "")
+    smart_switch_battery_entity_id: str = os.getenv("GRACE_SMART_SWITCH_BATTERY_ENTITY_ID", "")
     smart_switch_name: str = os.getenv("GRACE_SMART_SWITCH_NAME", "Zigbee Smart Switch Gen 3")
     admin_username: str = os.getenv("GRACE_ADMIN_USERNAME", "admin")
     admin_password_hash: str = os.getenv("GRACE_ADMIN_PASSWORD_HASH", "")
+    database_url: str = os.getenv("GRACE_DATABASE_URL", "")
 
 
 settings = Settings()

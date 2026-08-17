@@ -19,8 +19,11 @@ from .services import (
     ask_ollama_stream,
     detect_once,
     get_smart_switch,
+    get_light,
     get_weather,
     toggle_smart_switch,
+    toggle_light,
+    set_light,
     weather_summary,
 )
 from .state import LabState
@@ -30,6 +33,25 @@ app = FastAPI(title=settings.name, description=settings.expansion)
 state = LabState()
 WEB = Path(__file__).parent / "web"
 CERT_DIR = Path(__file__).parent.parent / ".certs"
+MOBILE_APK = WEB / "downloads" / "grace-mobile.apk"
+_lights_cache: dict | None = None
+_lights_cache_updated_at = 0.0
+_lights_cache_lock = asyncio.Lock()
+
+
+def _migrate_legacy_light() -> None:
+    """Carry the original single-switch configuration into the lighting layout."""
+    if not settings.smart_switch_entity_id:
+        return
+    fixtures = state.light_settings["fixtures"]
+    if any(item.get("entity_id") for item in fixtures):
+        return
+    bedroom = next(item for item in fixtures if item["id"] == "bedroom")
+    bedroom["entity_id"] = settings.smart_switch_entity_id
+    state._save()
+
+
+_migrate_legacy_light()
 
 
 class ChatRequest(BaseModel):
@@ -63,6 +85,23 @@ class SettingsUpdate(BaseModel):
     response_length: str | None = None
     proactive_comments: str | None = None
     confirm_sensitive_actions: bool | None = None
+
+
+class LightFixture(BaseModel):
+    id: str
+    name: str
+    entity_id: str = ""
+
+
+class LightPreset(BaseModel):
+    id: str
+    name: str
+    targets: dict[str, bool]
+
+
+class LightSettingsUpdate(BaseModel):
+    fixtures: list[LightFixture]
+    presets: list[LightPreset]
 
 
 class LoginRequest(BaseModel):
@@ -183,6 +222,25 @@ def certificate_download() -> FileResponse:
     if not certificate.is_file():
         raise HTTPException(status_code=404, detail="Certificate has not been generated. Run start-https.ps1 first.")
     return FileResponse(certificate, media_type="application/x-x509-ca-cert", filename="grace-local-ca.crt")
+
+
+@app.get("/mobile-app", response_class=HTMLResponse)
+def mobile_app() -> HTMLResponse:
+    """Provide the Android client download without exposing source-only paths."""
+    if MOBILE_APK.is_file():
+        action = '<a class="primary" href="/mobile-app/download">Download G.R.A.C.E. for Android</a>'
+        detail = "After downloading, allow installation from this browser when Android asks."
+    else:
+        action = "<p class=\"notice\">The Android package has not been built on this server yet.</p>"
+        detail = "Build mobile_app with Flutter, then copy its release APK to app/web/downloads/grace-mobile.apk."
+    return HTMLResponse(f"""<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>G.R.A.C.E. Android app</title><style>body{{max-width:560px;margin:48px auto;padding:0 20px;background:#060a12;color:#eef7ff;font:16px/1.5 system-ui,sans-serif}}.card{{padding:22px;border:1px solid #24556b;border-radius:20px;background:#0d1827}}.primary{{display:block;margin:20px 0;padding:14px;border-radius:14px;background:#236f9f;color:white;text-align:center;text-decoration:none;font-weight:700}}.notice,p{{color:#b8c8d8}}code{{color:#55e8ff;overflow-wrap:anywhere}}</style></head><body><main class="card"><h1>G.R.A.C.E. for Android</h1><p>The companion app shows the same local dashboard and includes a home-screen widget for lighting layouts.</p>{action}<p>{detail}</p></main></body></html>""")
+
+
+@app.get("/mobile-app/download")
+def mobile_app_download() -> FileResponse:
+    if not MOBILE_APK.is_file():
+        raise HTTPException(status_code=404, detail="The Android APK has not been built yet.")
+    return FileResponse(MOBILE_APK, media_type="application/vnd.android.package-archive", filename="grace-mobile.apk")
 
 
 @app.get("/manifest.webmanifest")
@@ -325,6 +383,115 @@ async def smart_switch(request: Request) -> dict:
 async def smart_switch_toggle(request: Request) -> dict:
     require_user(request)
     return await toggle_smart_switch()
+
+
+def _light_fixture(light_id: str) -> dict:
+    fixture = next((item for item in state.light_settings["fixtures"] if item["id"] == light_id), None)
+    if fixture is None:
+        raise HTTPException(status_code=404, detail="Light not found.")
+    return fixture
+
+
+def _clear_lights_cache() -> None:
+    global _lights_cache, _lights_cache_updated_at
+    _lights_cache = None
+    _lights_cache_updated_at = 0.0
+
+
+def _update_cached_light(light_id: str, status: dict) -> None:
+    if _lights_cache is None:
+        return
+    light = next((item for item in _lights_cache["lights"] if item["id"] == light_id), None)
+    if light is not None:
+        light.update(status)
+
+
+def _validate_light_settings(update: LightSettingsUpdate) -> dict:
+    fixtures = [item.model_dump() for item in update.fixtures]
+    presets = [item.model_dump() for item in update.presets]
+    fixture_ids = [item["id"] for item in fixtures]
+    preset_ids = [item["id"] for item in presets]
+    required_fixture_ids = {"kitchen", "dining_room", "living_room", "stairway", "bedroom"}
+    required_preset_ids = {"bedtime", "wind_down", "movie_time", "getting_home"}
+    if set(fixture_ids) != required_fixture_ids or len(fixture_ids) != len(required_fixture_ids):
+        raise HTTPException(status_code=400, detail="Keep the five standard light locations configured.")
+    if set(preset_ids) != required_preset_ids or len(preset_ids) != len(required_preset_ids):
+        raise HTTPException(status_code=400, detail="Keep the four standard lighting layouts configured.")
+    for fixture in fixtures:
+        if not fixture["name"].strip() or len(fixture["name"].strip()) > 60:
+            raise HTTPException(status_code=400, detail="Each light needs a name up to 60 characters.")
+        entity_id = fixture["entity_id"].strip()
+        if entity_id and not entity_id.startswith(("light.", "switch.")):
+            raise HTTPException(status_code=400, detail="Light entity IDs must begin with light. or switch.")
+        fixture["name"] = fixture["name"].strip()
+        fixture["entity_id"] = entity_id
+    for preset in presets:
+        if not preset["name"].strip() or len(preset["name"].strip()) > 60:
+            raise HTTPException(status_code=400, detail="Each layout needs a name up to 60 characters.")
+        if any(light_id not in required_fixture_ids for light_id in preset["targets"]):
+            raise HTTPException(status_code=400, detail="A layout contains an unknown light.")
+        preset["name"] = preset["name"].strip()
+    return {"fixtures": fixtures, "presets": presets}
+
+
+@app.get("/api/lights")
+async def lights(request: Request) -> dict:
+    require_user(request)
+    global _lights_cache, _lights_cache_updated_at
+    if _lights_cache and time.monotonic() - _lights_cache_updated_at < settings.home_assistant_cache_seconds:
+        return _lights_cache
+    async with _lights_cache_lock:
+        if _lights_cache and time.monotonic() - _lights_cache_updated_at < settings.home_assistant_cache_seconds:
+            return _lights_cache
+        fixtures = list(state.light_settings["fixtures"])
+        statuses = await asyncio.gather(*(get_light(item["entity_id"], item["name"]) for item in fixtures))
+        _lights_cache = {
+            "lights": [{"id": fixture["id"], **status} for fixture, status in zip(fixtures, statuses)],
+            "presets": [{"id": item["id"], "name": item["name"]} for item in state.light_settings["presets"]],
+        }
+        _lights_cache_updated_at = time.monotonic()
+        return _lights_cache
+
+
+@app.post("/api/lights/{light_id}/toggle")
+async def light_toggle(light_id: str, request: Request) -> dict:
+    require_user(request)
+    fixture = _light_fixture(light_id)
+    result = await toggle_light(fixture["entity_id"], fixture["name"])
+    _update_cached_light(light_id, result)
+    return result
+
+
+@app.post("/api/lights/presets/{preset_id}")
+async def apply_light_preset(preset_id: str, request: Request) -> dict:
+    require_user(request)
+    preset = next((item for item in state.light_settings["presets"] if item["id"] == preset_id), None)
+    if preset is None:
+        raise HTTPException(status_code=404, detail="Lighting layout not found.")
+    fixtures = {item["id"]: item for item in state.light_settings["fixtures"]}
+    targets = list(preset["targets"].items())
+    results = await asyncio.gather(*(
+        set_light(fixtures[light_id]["entity_id"], fixtures[light_id]["name"], on)
+        for light_id, on in targets
+    ))
+    for (light_id, _), result in zip(targets, results):
+        _update_cached_light(light_id, result)
+    return {"name": preset["name"], "results": results}
+
+
+@app.get("/api/lights/settings")
+def light_settings(request: Request) -> dict:
+    require_admin(request)
+    return {"fixtures": list(state.light_settings["fixtures"]), "presets": list(state.light_settings["presets"])}
+
+
+@app.put("/api/lights/settings")
+def update_light_settings(update: LightSettingsUpdate, request: Request) -> dict:
+    require_admin(request)
+    state.light_settings = _validate_light_settings(update)
+    state._save()
+    _clear_lights_cache()
+    return state.light_settings
 
 
 @app.get("/api/network")
@@ -668,7 +835,7 @@ async def chat(request: ChatRequest, http_request: Request) -> dict:
     else:
         scene = state.snapshot()
         scene["memories"] = list(state.memories)
-        answer = await ask_ollama(message, scene)
+        answer = await ask_ollama(message, scene, state.conversation_messages(user["id"], conversation_id)[:-1])
     state.add_conversation_message(user["id"], user["username"], conversation_id, "assistant", answer)
     return {"answer": answer, "conversation_id": conversation_id, **state.snapshot()}
 
@@ -690,9 +857,10 @@ async def chat_stream(request: ChatRequest, http_request: Request) -> StreamingR
         return StreamingResponse(iter((answer,)), media_type="text/plain", headers={"X-Conversation-Id": conversation_id})
     scene = state.snapshot()
     scene["memories"] = list(state.memories)
+    conversation = state.conversation_messages(user["id"], conversation_id)[:-1]
     async def generate():
         parts: list[str] = []
-        async for part in ask_ollama_stream(message, scene):
+        async for part in ask_ollama_stream(message, scene, conversation):
             parts.append(part)
             yield part
         state.add_conversation_message(user["id"], user["username"], conversation_id, "assistant", "".join(parts))
@@ -709,7 +877,8 @@ async def _run_chat_job(job: dict, message: str, user: dict) -> None:
         else:
             scene = state.snapshot()
             scene["memories"] = list(state.memories)
-            async for part in ask_ollama_stream(message, scene):
+            conversation = state.conversation_messages(user["id"], job["conversation_id"])[:-1]
+            async for part in ask_ollama_stream(message, scene, conversation):
                 job["answer"] += part
         if not job["answer"]:
             job["answer"] = "No response."
@@ -762,7 +931,5 @@ def chat_job(job_id: str, request: Request) -> dict:
 @app.get("/api/conversations")
 def conversations(request: Request) -> dict:
     user = require_user(request)
-    if user["role"] == "admin":
-        return {"conversations": list(state.conversations)}
     return {"conversations": [item for item in state.conversations if item["user_id"] == user["id"]]}
 

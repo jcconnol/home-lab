@@ -4,10 +4,12 @@ This file is a living list of future capabilities. Ideas should be promoted into
 
 ## First priority ideas
 
-1. **[Authentication-first UI refactor](UI_REFACTOR.md)** — require sign-in before showing app content, persist secure long-lived sessions across server restarts, and present a role-aware dashboard containing only the features each user may access.
+1. **[Apartment object-permanence research prototype — in progress](OBJECT_PERMANENCE_RESEARCH.md)** — use a Raspberry Pi camera node and local computer processing to remember household objects' last confirmed locations and observed person-caused moves through occlusion.
 
-2. **IR TV and Apple TV control** — add an IR sensor/transmitter pointed at the TV and Apple TV so the user can log into Grace from a phone, press controls in the app, and have Grace control common media and power functions.
-3. **Standalone wearable Grace controller** — explore a watch, armband, or similar phone-independent device for quick Grace interactions, potentially including gesture controls, a physical action button, microphone, and audio or haptic feedback.
+2. **[Authentication-first UI refactor](UI_REFACTOR.md)** — require sign-in before showing app content, persist secure long-lived sessions across server restarts, and present a role-aware dashboard containing only the features each user may access.
+
+3. **IR TV and Apple TV control** — add an IR sensor/transmitter pointed at the TV and Apple TV so the user can log into Grace from a phone, press controls in the app, and have Grace control common media and power functions.
+4. **Standalone wearable Grace controller** — explore a watch, armband, or similar phone-independent device for quick Grace interactions, potentially including gesture controls, a physical action button, microphone, and audio or haptic feedback.
 
 ## Difficulty-ranked backlog
 

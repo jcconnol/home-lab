@@ -3,6 +3,7 @@ uvicorn[standard]>=0.34,<1
 httpx>=0.28,<1
 python-dotenv>=1,<2
 cryptography>=45,<47
+psycopg[binary]>=3.2,<4
 
 # Optional hardware/inference integrations:
 # opencv-python

@@ -9,4 +9,7 @@ app/grace_data.json
 models/*.pt
 .pytest_cache/
 .certs/
+logs/
+scripts/grace-python-path.txt
+app/web/downloads/*.apk
 

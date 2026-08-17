@@ -60,6 +60,40 @@ Run the local service:
 uvicorn app.main:app --reload --host 127.0.0.1 --port 8000
 ```
 
+After restarting the server, start the two listeners separately when both HTTP
+and HTTPS access are needed:
+
+HTTP (`http://localhost:8000`):
+
+```powershell
+uvicorn app.main:app --reload --host 127.0.0.1 --port 8000
+```
+
+HTTPS (`https://localhost:8443`):
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File .\start-https.ps1
+```
+
+The HTTPS script creates or refreshes the local certificate before starting
+Uvicorn on port `8443`.
+
+### Persistent server watchdog
+
+For normal use, install the watchdog from an **elevated PowerShell** so the
+HTTP and HTTPS listeners start at Windows boot, before user sign-in, and are
+checked every minute:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\install-grace-watchdog.ps1
+```
+
+The installer creates the SYSTEM tasks `G.R.A.C.E. Server Watchdog Startup`
+and `G.R.A.C.E. Server Watchdog Minute Check`. Do not use the legacy
+user-level `G.R.A.C.E. Server Watchdog` task: it runs in the interactive
+desktop session and can flash a terminal window. It is currently disabled
+until the SYSTEM tasks are installed successfully.
+
 Compile-check Python files without starting integrations:
 
 ```powershell
@@ -83,6 +117,10 @@ The repository has no established commit history yet. Use short imperative commi
 ## Security and Configuration
 
 Never commit `.env`, credentials, camera footage, model weights, or health data. Use `.env.example` for documented defaults. Treat voice identification as a convenience signal; require a second factor for sensitive actions. Preserve local-only defaults and explicit approval for remote control or self-modifying behavior.
+
+## Database Safety
+
+Treat PostgreSQL data as user data. Never drop, truncate, recreate, or otherwise destructively alter a database, schema, or table without first taking a verified backup, confirming the exact target and impact, and obtaining explicit user approval. Prefer additive, reversible migrations; preserve existing rows during migrations; and verify row counts after any data migration.
 
 ## Dashboard UI Verification
 

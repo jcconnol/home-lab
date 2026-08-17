@@ -89,7 +89,17 @@ def detect_once(state: LabState) -> str:
         return "Vision is currently unavailable."
 
 
-async def ask_ollama(prompt: str, scene: dict) -> str:
+def _conversation_context(messages: list[dict] | None) -> str:
+    if not messages:
+        return "- no earlier messages in this conversation"
+    return "\n".join(
+        f"{('User' if item.get('role') == 'user' else 'G.R.A.C.E.')}: {item.get('content', '')}"
+        for item in messages
+        if item.get("role") in {"user", "assistant"} and item.get("content")
+    ) or "- no earlier messages in this conversation"
+
+
+async def ask_ollama(prompt: str, scene: dict, conversation: list[dict] | None = None) -> str:
     context = "\n".join(
         f'- {item["label"]} (confidence {item["confidence"]})'
         for item in scene["current_objects"]
@@ -106,7 +116,8 @@ async def ask_ollama(prompt: str, scene: dict) -> str:
             f"Humor is {scene.get('grace_settings', {}).get('humor', 'balanced')}; use either a direct or characterful response as fits the moment, not a mandatory status-and-joke pair. "
             f"Always be serious for warnings, security, and sensitive actions.\nBehavior guidance: {_ASSISTANT_STYLE}\n"
             f"Current camera detections:\n{context}\n"
-            f"Watch mode: {scene['watch_mode']}\nSaved user memories (use only when relevant):\n{memory_context}\nUser request: {prompt}"
+            f"Watch mode: {scene['watch_mode']}\nSaved user memories (use only when relevant):\n{memory_context}\n"
+            f"Earlier messages in this conversation:\n{_conversation_context(conversation)}\nUser request: {prompt}"
         ),
     }
     try:
@@ -118,12 +129,12 @@ async def ask_ollama(prompt: str, scene: dict) -> str:
         return "The local language model is unavailable. Start Ollama or use the scene endpoints."
 
 
-async def ask_ollama_stream(prompt: str, scene: dict) -> AsyncIterator[str]:
+async def ask_ollama_stream(prompt: str, scene: dict, conversation: list[dict] | None = None) -> AsyncIterator[str]:
     """Yield visible response chunks as Ollama generates them."""
     context = "\n".join(f'- {item["label"]} (confidence {item["confidence"]})' for item in scene["current_objects"]) or "- nothing detected"
     memory_context = "\n".join(f'- {item["content"]}' for item in scene.get("memories", [])) or "- no saved memories"
     personality = scene.get("grace_settings", {})
-    payload = {"model": settings.ollama_model, "stream": True, "think": False, "keep_alive": "30m", "prompt": f"You are {settings.name}, a concise local home-lab assistant. Answer the user's request directly. Do not narrate generation, emit progress updates, or provide unsolicited status reports.\nYour personality is {personality.get('personality', settings.personality)}. Humor is {personality.get('humor', 'balanced')}; use either a direct or characterful response as fits the moment, not a mandatory status-and-joke pair. Always be serious for warnings, security, and sensitive actions. Formality is {personality.get('formality', 'polished')} and response length is {personality.get('response_length', 'standard')}.\nBehavior guidance: {_ASSISTANT_STYLE}\nCurrent camera detections:\n{context}\nWatch mode: {scene['watch_mode']}\nSaved user memories (use only when relevant):\n{memory_context}\nUser request: {prompt}"}
+    payload = {"model": settings.ollama_model, "stream": True, "think": False, "keep_alive": "30m", "prompt": f"You are {settings.name}, a concise local home-lab assistant. Answer the user's request directly. Do not narrate generation, emit progress updates, or provide unsolicited status reports.\nYour personality is {personality.get('personality', settings.personality)}. Humor is {personality.get('humor', 'balanced')}; use either a direct or characterful response as fits the moment, not a mandatory status-and-joke pair. Always be serious for warnings, security, and sensitive actions. Formality is {personality.get('formality', 'polished')} and response length is {personality.get('response_length', 'standard')}.\nBehavior guidance: {_ASSISTANT_STYLE}\nCurrent camera detections:\n{context}\nWatch mode: {scene['watch_mode']}\nSaved user memories (use only when relevant):\n{memory_context}\nEarlier messages in this conversation:\n{_conversation_context(conversation)}\nUser request: {prompt}"}
     try:
         async with httpx.AsyncClient(timeout=httpx.Timeout(300, connect=10)) as client:
             async with client.stream("POST", f"{settings.ollama_url}/api/generate", json=payload) as response:
@@ -190,11 +201,29 @@ async def get_weather(force_refresh: bool = False) -> dict:
 
 
 def _smart_switch_configured() -> bool:
+    entity_id = settings.smart_switch_entity_id
     return bool(
         settings.home_assistant_url
         and settings.home_assistant_token
-        and settings.smart_switch_entity_id.startswith("switch.")
+        and (entity_id.startswith("switch.") or entity_id.startswith("light."))
     )
+
+
+async def _home_assistant_request(method: str, path: str, **kwargs: Any) -> httpx.Response:
+    """Send a request through Home Assistant's LAN hostname."""
+    async with httpx.AsyncClient(timeout=10, trust_env=False) as client:
+        response = await client.request(method, f"{settings.home_assistant_url}{path}", **kwargs)
+        response.raise_for_status()
+        return response
+
+
+def _smart_switch_battery_entity_id() -> str:
+    if settings.smart_switch_battery_entity_id:
+        return settings.smart_switch_battery_entity_id
+    entity_id = settings.smart_switch_entity_id
+    if entity_id.startswith("switch."):
+        return f"sensor.{entity_id[7:]}_battery"
+    return ""
 
 
 async def get_smart_switch() -> dict:
@@ -208,17 +237,31 @@ async def get_smart_switch() -> dict:
         }
     headers = {"Authorization": f"Bearer {settings.home_assistant_token}"}
     try:
-        async with httpx.AsyncClient(timeout=10) as client:
-            response = await client.get(
-                f"{settings.home_assistant_url}/api/states/{settings.smart_switch_entity_id}",
-                headers=headers,
-            )
-            response.raise_for_status()
-            payload = response.json()
+        response = await _home_assistant_request(
+            "GET", f"/api/states/{settings.smart_switch_entity_id}", headers=headers
+        )
+        payload = response.json()
+        battery_level = None
+        battery_entity_id = _smart_switch_battery_entity_id()
+        if battery_entity_id:
+            try:
+                battery_response = await _home_assistant_request(
+                    "GET", f"/api/states/{battery_entity_id}", headers=headers
+                )
+                battery_payload = battery_response.json()
+                battery_value = battery_payload.get("state")
+                if battery_value not in {None, "unknown", "unavailable"}:
+                    try:
+                        battery_level = float(battery_value)
+                    except (TypeError, ValueError):
+                        battery_level = battery_payload.get("attributes", {}).get("battery_level")
+            except httpx.HTTPError:
+                pass
         return {
             "available": payload.get("state") in {"on", "off"},
             "name": payload.get("attributes", {}).get("friendly_name") or settings.smart_switch_name,
             "state": payload.get("state", "unavailable"),
+            "battery_level": battery_level,
             "message": "Connected through Home Assistant.",
         }
     except (httpx.HTTPError, TypeError, ValueError):
@@ -235,14 +278,14 @@ async def toggle_smart_switch() -> dict:
     if not _smart_switch_configured():
         return await get_smart_switch()
     headers = {"Authorization": f"Bearer {settings.home_assistant_token}"}
+    domain = settings.smart_switch_entity_id.split(".", 1)[0]
     try:
-        async with httpx.AsyncClient(timeout=10) as client:
-            response = await client.post(
-                f"{settings.home_assistant_url}/api/services/switch/toggle",
-                headers=headers,
-                json={"entity_id": settings.smart_switch_entity_id},
-            )
-            response.raise_for_status()
+        await _home_assistant_request(
+            "POST",
+            f"/api/services/{domain}/toggle",
+            headers=headers,
+            json={"entity_id": settings.smart_switch_entity_id},
+        )
     except httpx.HTTPError:
         return {
             "available": False,
@@ -251,6 +294,62 @@ async def toggle_smart_switch() -> dict:
             "message": "Home Assistant could not toggle the switch.",
         }
     return await get_smart_switch()
+
+
+def _light_configured(entity_id: str) -> bool:
+    return bool(
+        settings.home_assistant_url
+        and settings.home_assistant_token
+        and (entity_id.startswith("switch.") or entity_id.startswith("light."))
+    )
+
+
+async def get_light(entity_id: str, name: str) -> dict:
+    """Read a configured light or switch from Home Assistant."""
+    if not entity_id:
+        return {"configured": False, "available": False, "name": name, "state": "not_configured", "message": "This light has not been configured yet."}
+    if not _light_configured(entity_id):
+        return {"configured": True, "available": False, "name": name, "state": "unavailable", "message": "Home Assistant is not configured for this light."}
+    try:
+        response = await _home_assistant_request(
+            "GET",
+            f"/api/states/{entity_id}",
+            headers={"Authorization": f"Bearer {settings.home_assistant_token}"},
+        )
+        payload = response.json()
+        return {
+            "configured": True,
+            "available": payload.get("state") in {"on", "off"},
+            "name": payload.get("attributes", {}).get("friendly_name") or name,
+            "state": payload.get("state", "unavailable"),
+            "message": "Connected through Home Assistant.",
+        }
+    except (httpx.HTTPError, TypeError, ValueError):
+        return {"configured": True, "available": False, "name": name, "state": "unavailable", "message": "Home Assistant or this light is unavailable."}
+
+
+async def set_light(entity_id: str, name: str, on: bool) -> dict:
+    """Set a configured Home Assistant light or switch, then confirm its state."""
+    if not _light_configured(entity_id):
+        return await get_light(entity_id, name)
+    domain = entity_id.split(".", 1)[0]
+    try:
+        await _home_assistant_request(
+            "POST",
+            f"/api/services/{domain}/{'turn_on' if on else 'turn_off'}",
+            headers={"Authorization": f"Bearer {settings.home_assistant_token}"},
+            json={"entity_id": entity_id},
+        )
+    except httpx.HTTPError:
+        return {"configured": True, "available": False, "name": name, "state": "unavailable", "message": "Home Assistant could not control this light."}
+    return await get_light(entity_id, name)
+
+
+async def toggle_light(entity_id: str, name: str) -> dict:
+    current = await get_light(entity_id, name)
+    if not current["available"]:
+        return current
+    return await set_light(entity_id, name, current["state"] != "on")
 
 
 def weather_summary(weather: dict) -> str:
