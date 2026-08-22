@@ -1,5 +1,13 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
+    <style name="WidgetLightingButton" parent="android:style/Widget.Material.Button">
+        <item name="android:layout_height">54dp</item>
+        <item name="android:layout_margin">3dp</item>
+        <item name="android:background">@drawable/lighting_widget_button</item>
+        <item name="android:textColor">#EEF7FF</item>
+        <item name="android:textSize">13sp</item>
+        <item name="android:textAllCaps">false</item>
+    </style>
     <!-- Theme applied to the Android Window while the process is starting when the OS's Dark Mode setting is off -->
     <style name="LaunchTheme" parent="@android:style/Theme.Light.NoTitleBar">
         <!-- Show a splash screen on the activity. Automatically removed when

@@ -1,6 +1,8 @@
 # G.R.A.C.E. mobile app
 
-The Flutter app loads the same authenticated G.R.A.C.E. dashboard served by this repository, so every dashboard screen and control stays in sync with the server. On Android it also supplies a home-screen widget with the four lighting layouts. Tapping a widget layout opens the signed-in app and applies that layout through the existing dashboard session; it does not copy login credentials into widget storage.
+The Flutter app is a native recreation of the authenticated G.R.A.C.E. dashboard. It talks directly to the existing local API for sign-in, chat, system status, smart devices, music, weather, network diagnostics, briefings, memory, image generation, and personality settings. It does not embed the dashboard in a WebView.
+
+On Android it also supplies a home-screen **G.R.A.C.E. lighting** widget with buttons for Bedtime, Wind down, Movie time, and Getting home. Each button applies its layout directly in Home Assistant, without opening the app.
 
 ## Build and publish
 
@@ -10,7 +12,7 @@ Install Flutter, then run this from `mobile_app`:
 flutter create --platforms=android .
 flutter pub get
 flutter analyze
-flutter build apk --release --dart-define=GRACE_SERVER_URL=https://YOUR-SERVER:8443
+flutter build apk --release --dart-define-from-file=..\.env
 New-Item -ItemType Directory -Force ..\app\web\downloads
 Copy-Item .\build\app\outputs\flutter-apk\app-release.apk ..\app\web\downloads\grace-mobile.apk
 ```
@@ -19,4 +21,17 @@ Copy-Item .\build\app\outputs\flutter-apk\app-release.apk ..\app\web\downloads\g
 
 Open the dashboard’s **Account → Android app** link to download the published APK. The phone and server must be on the same LAN and use HTTPS; install the local certificate before opening the app.
 
-After installing and signing in, add **G.R.A.C.E. lighting** from the Android widget picker. Each button opens the app and applies its matching layout. Widget labels use the four default layout names; renamed layouts remain available from the Lighting screen.
+## Direct Home Assistant lighting
+
+The mobile app calls Home Assistant directly for the configured smart switch. The rest of G.R.A.C.E. continues to use `GRACE_SERVER_URL` (or its built-in `https://10.0.0.5:8443` default).
+
+Flutter accepts dotenv files directly as build-time defines, so the command above loads `GRACE_HOME_ASSISTANT_URL`, `GRACE_HOME_ASSISTANT_TOKEN`, `GRACE_SMART_SWITCH_ENTITY_ID`, and `GRACE_SMART_SWITCH_NAME` from the repository `.env`. Do not commit `.env`: a token supplied this way is embedded in the APK. Prefer a Home Assistant token limited to this phone’s lighting use.
+
+After installing, add **G.R.A.C.E. lighting** from the Android widget picker. The widget controls the five current switches directly:
+
+- **Bedtime:** All lights off.
+- **Wind down:** Bedroom Main Lightswitch on; all others off.
+- **Movie time:** Stair Light on; all others off.
+- **Getting home:** Dining Room, Kitchen, Living Room, and Stair Lights on; Bedroom Main Lightswitch off.
+
+The widget receives the same Home Assistant build settings as the Flutter app, so build with `--dart-define-from-file=..\.env` and use a token limited to this phone's lighting use.

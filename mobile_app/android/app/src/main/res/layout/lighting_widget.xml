@@ -1,9 +1,33 @@
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
-    android:layout_width="match_parent" android:layout_height="match_parent" android:orientation="vertical"
-    android:padding="12dp" android:background="#0D1827">
-    <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="G.R.A.C.E. lighting" android:textColor="#55E8FF" android:textStyle="bold" android:textSize="16sp" android:layout_marginBottom="6dp" />
-    <Button android:id="@+id/preset_bedtime" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="Bedtime" />
-    <Button android:id="@+id/preset_wind_down" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="Wind down" />
-    <Button android:id="@+id/preset_movie_time" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="Movie time" />
-    <Button android:id="@+id/preset_getting_home" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="Getting home" />
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:padding="12dp"
+    android:background="@drawable/lighting_widget_background">
+
+    <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginBottom="3dp" android:text="G.R.A.C.E. lighting" android:textColor="#55E8FF" android:textSize="17sp" android:textStyle="bold" />
+    <TextView android:id="@+id/widget_status" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginBottom="5dp" android:maxLines="2" android:text="Ready" android:textColor="#8BA0B6" android:textSize="13sp" />
+
+    <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal">
+        <Button android:id="@+id/preset_bedtime" style="@style/WidgetLightingButton" android:layout_width="0dp" android:layout_weight="1" android:text="Bedtime" />
+        <Button android:id="@+id/preset_wind_down" style="@style/WidgetLightingButton" android:layout_width="0dp" android:layout_weight="1" android:text="Wind down" />
+    </LinearLayout>
+    <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal">
+        <Button android:id="@+id/preset_movie_time" style="@style/WidgetLightingButton" android:layout_width="0dp" android:layout_weight="1" android:text="Movie time" />
+        <Button android:id="@+id/preset_getting_home" style="@style/WidgetLightingButton" android:layout_width="0dp" android:layout_weight="1" android:text="Getting home" />
+    </LinearLayout>
+
+    <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginTop="4dp" android:layout_marginBottom="2dp" android:text="Individual lights" android:textColor="#55E8FF" android:textSize="14sp" android:textStyle="bold" />
+    <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal">
+        <Button android:id="@+id/light_bedroom" style="@style/WidgetLightingButton" android:layout_width="0dp" android:layout_weight="1" android:text="Bedroom" />
+        <Button android:id="@+id/light_dining_room" style="@style/WidgetLightingButton" android:layout_width="0dp" android:layout_weight="1" android:text="Dining room" />
+    </LinearLayout>
+    <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal">
+        <Button android:id="@+id/light_kitchen" style="@style/WidgetLightingButton" android:layout_width="0dp" android:layout_weight="1" android:text="Kitchen" />
+        <Button android:id="@+id/light_living_room" style="@style/WidgetLightingButton" android:layout_width="0dp" android:layout_weight="1" android:text="Living room" />
+    </LinearLayout>
+    <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal">
+        <Button android:id="@+id/light_stair" style="@style/WidgetLightingButton" android:layout_width="0dp" android:layout_weight="1" android:text="Stair light" />
+        <TextView android:layout_width="0dp" android:layout_height="54dp" android:layout_weight="1" />
+    </LinearLayout>
 </LinearLayout>

@@ -110,6 +110,20 @@ Use Python 3.11+ style, four-space indentation, `snake_case` for functions and v
 
 Use `pytest` for unit and API tests when adding the test suite. Name files `test_*.py` and keep hardware-dependent tests marked or isolated so ordinary tests run without a camera, GPU, or Ollama. At minimum, run `python -m compileall -q app` and `git diff --check` before submitting changes.
 
+### Mobile App Verification
+
+After every change under `mobile_app/`, run a successful Android compile before
+submitting. From `mobile_app`, use:
+
+```powershell
+flutter build apk --debug --dart-define-from-file=..\.env
+```
+
+If a real `.env` is unavailable, compile with the required non-secret build
+defines instead. Also run `git diff --check`. Do not claim a mobile change is
+complete until the compile succeeds or the blocking environment issue is
+explicitly reported.
+
 ## Commits and Pull Requests
 
 The repository has no established commit history yet. Use short imperative commit subjects, such as `Add scene status endpoint` or `Document feeder safety rules`. Pull requests should explain the behavior change, list verification commands, call out hardware or configuration requirements, and include dashboard screenshots for visual changes.
