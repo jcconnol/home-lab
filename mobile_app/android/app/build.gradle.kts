@@ -43,11 +43,8 @@ android {
         versionCode = flutter.versionCode
         versionName = flutter.versionName
 
-        // The widget runs without a Flutter engine, so it needs the same
-        // Home Assistant settings that are supplied to Dart at build time.
-        resValue("string", "grace_home_assistant_url", androidString(dartDefines["GRACE_HOME_ASSISTANT_URL"] ?: ""))
-        resValue("string", "grace_home_assistant_token", androidString(dartDefines["GRACE_HOME_ASSISTANT_TOKEN"] ?: ""))
-        resValue("string", "grace_smart_switch_entity_id", androidString(dartDefines["GRACE_SMART_SWITCH_ENTITY_ID"] ?: ""))
+        // MainActivity saves the authenticated session used by the native widget.
+        resValue("string", "grace_server_url", androidString(dartDefines["GRACE_SERVER_URL"] ?: "https://10.0.0.5:8443"))
     }
 
     buildTypes {

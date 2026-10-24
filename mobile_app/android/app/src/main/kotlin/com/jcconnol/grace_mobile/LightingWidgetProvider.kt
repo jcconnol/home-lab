@@ -8,41 +8,37 @@ import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.widget.RemoteViews
-import java.io.OutputStreamWriter
 import java.net.HttpURLConnection
 import java.net.URL
 import java.security.SecureRandom
+import java.security.cert.X509Certificate
 import java.util.concurrent.Executors
 import javax.net.ssl.HostnameVerifier
 import javax.net.ssl.HttpsURLConnection
 import javax.net.ssl.SSLContext
 import javax.net.ssl.TrustManager
 import javax.net.ssl.X509TrustManager
-import java.security.cert.X509Certificate
 
 class LightingWidgetProvider : AppWidgetProvider() {
     override fun onUpdate(context: Context, manager: AppWidgetManager, ids: IntArray) {
         val views = RemoteViews(context.packageName, R.layout.lighting_widget)
         views.setTextViewText(R.id.widget_status, "Ready")
-        val buttons = mapOf(
+        mapOf(
             "bedtime" to R.id.preset_bedtime,
             "wind_down" to R.id.preset_wind_down,
             "movie_time" to R.id.preset_movie_time,
             "getting_home" to R.id.preset_getting_home,
-        )
-        buttons.forEach { (presetId, viewId) ->
-            val pending = pendingIntent(context, ACTION_APPLY_PRESET, presetId, viewId)
-            views.setOnClickPendingIntent(viewId, pending)
+        ).forEach { (presetId, viewId) ->
+            views.setOnClickPendingIntent(viewId, pendingIntent(context, ACTION_APPLY_PRESET, presetId, viewId))
         }
-        val lightButtons = mapOf(
-            "switch.bedroom_main_lightswitch" to R.id.light_bedroom,
-            "switch.dining_room_light" to R.id.light_dining_room,
-            "switch.kitchen_light" to R.id.light_kitchen,
-            "switch.living_room_light" to R.id.light_living_room,
-            "switch.stair_light" to R.id.light_stair,
-        )
-        lightButtons.forEach { (entityId, viewId) ->
-            views.setOnClickPendingIntent(viewId, pendingIntent(context, ACTION_TOGGLE_LIGHT, entityId, viewId))
+        mapOf(
+            "bedroom" to R.id.light_bedroom,
+            "dining_room" to R.id.light_dining_room,
+            "kitchen" to R.id.light_kitchen,
+            "living_room" to R.id.light_living_room,
+            "stairway" to R.id.light_stair,
+        ).forEach { (lightId, viewId) ->
+            views.setOnClickPendingIntent(viewId, pendingIntent(context, ACTION_TOGGLE_LIGHT, lightId, viewId))
         }
         manager.updateAppWidget(ids, views)
     }
@@ -52,13 +48,17 @@ class LightingWidgetProvider : AppWidgetProvider() {
         when (intent.action) {
             ACTION_APPLY_PRESET -> {
                 val presetId = intent.data?.lastPathSegment ?: return
-                val preset = presets[presetId] ?: return
-                runAction(context, "Applying ${preset.name}…", "${preset.name} applied") { applyPreset(context, presetId) }
+                val name = presets[presetId] ?: return
+                runAction(context, "Applying $name…", "$name applied") {
+                    postGrace(context, "/api/lights/presets/$presetId")
+                }
             }
             ACTION_TOGGLE_LIGHT -> {
-                val entityId = intent.data?.lastPathSegment ?: return
-                val light = lights[entityId] ?: return
-                runAction(context, "Toggling ${light.name}…", "${light.name} toggled") { toggleLight(context, entityId) }
+                val lightId = intent.data?.lastPathSegment ?: return
+                val name = lights[lightId] ?: return
+                runAction(context, "Toggling $name…", "$name toggled") {
+                    postGrace(context, "/api/lights/$lightId/toggle")
+                }
             }
         }
     }
@@ -85,27 +85,15 @@ class LightingWidgetProvider : AppWidgetProvider() {
         }
     }
 
-    private fun applyPreset(context: Context, presetId: String) {
-        val url = context.getString(R.string.grace_home_assistant_url).trimEnd('/')
-        val token = context.getString(R.string.grace_home_assistant_token)
-        val preset = presets[presetId] ?: return
-        require(url.isNotEmpty() && token.isNotEmpty()) { "Home Assistant is not configured." }
+    private fun postGrace(context: Context, path: String) {
+        val preferences = context.getSharedPreferences(WIDGET_PREFERENCES, Context.MODE_PRIVATE)
+        val url = preferences.getString("server", null)?.trimEnd('/')
+            ?: context.getString(R.string.grace_server_url).trimEnd('/')
+        val cookie = preferences.getString("cookie", null).orEmpty()
+        require(url.isNotEmpty()) { "G.R.A.C.E. server is not configured." }
+        require(cookie.isNotEmpty()) { "Open G.R.A.C.E. and sign in first." }
 
-        callSwitchService(url, token, "turn_off", allLights - preset.lightsOn)
-        callSwitchService(url, token, "turn_on", preset.lightsOn)
-    }
-
-    private fun toggleLight(context: Context, entityId: String) {
-        val url = context.getString(R.string.grace_home_assistant_url).trimEnd('/')
-        val token = context.getString(R.string.grace_home_assistant_token)
-        require(url.isNotEmpty() && token.isNotEmpty()) { "Home Assistant is not configured." }
-        callSwitchService(url, token, "toggle", setOf(entityId))
-    }
-
-    private fun callSwitchService(url: String, token: String, service: String, entityIds: Set<String>) {
-        if (entityIds.isEmpty()) return
-
-        val connection = (URL("$url/api/services/switch/$service").openConnection() as HttpURLConnection)
+        val connection = URL("$url$path").openConnection() as HttpURLConnection
         try {
             if (connection is HttpsURLConnection) {
                 connection.sslSocketFactory = localSslSocketFactory
@@ -113,14 +101,15 @@ class LightingWidgetProvider : AppWidgetProvider() {
             }
             connection.requestMethod = "POST"
             connection.connectTimeout = 5_000
-            connection.readTimeout = 5_000
+            connection.readTimeout = 8_000
             connection.doOutput = true
-            connection.setRequestProperty("Authorization", "Bearer $token")
-            connection.setRequestProperty("Content-Type", "application/json")
-            OutputStreamWriter(connection.outputStream).use { output ->
-                output.write("{\"entity_id\":[${entityIds.joinToString(",") { "\"$it\"" }}]}")
+            connection.setRequestProperty("Cookie", cookie)
+            connection.setRequestProperty("Accept", "application/json")
+            connection.outputStream.use { }
+            check(connection.responseCode in 200..299) {
+                if (connection.responseCode == 401) "Sign in to G.R.A.C.E. again."
+                else "G.R.A.C.E. request failed (${connection.responseCode})."
             }
-            check(connection.responseCode in 200..299) { "Home Assistant request failed." }
         } finally {
             connection.disconnect()
         }
@@ -137,6 +126,7 @@ class LightingWidgetProvider : AppWidgetProvider() {
     companion object {
         private const val ACTION_APPLY_PRESET = "com.jcconnol.grace_mobile.APPLY_PRESET"
         private const val ACTION_TOGGLE_LIGHT = "com.jcconnol.grace_mobile.TOGGLE_LIGHT"
+        private const val WIDGET_PREFERENCES = "grace_widget"
         private val executor = Executors.newSingleThreadExecutor()
         private val localSslSocketFactory by lazy {
             val trustManager = object : X509TrustManager {
@@ -148,28 +138,18 @@ class LightingWidgetProvider : AppWidgetProvider() {
                 init(null, arrayOf<TrustManager>(trustManager), SecureRandom())
             }.socketFactory
         }
-        private val allLights = setOf(
-            "switch.bedroom_main_lightswitch",
-            "switch.dining_room_light",
-            "switch.kitchen_light",
-            "switch.living_room_light",
-            "switch.stair_light",
-        )
         private val presets = mapOf(
-            "bedtime" to LightingPreset("Bedtime", emptySet()),
-            "wind_down" to LightingPreset("Wind down", setOf("switch.bedroom_main_lightswitch")),
-            "movie_time" to LightingPreset("Movie time", setOf("switch.stair_light")),
-            "getting_home" to LightingPreset("Getting home", setOf("switch.dining_room_light", "switch.kitchen_light", "switch.living_room_light", "switch.stair_light")),
+            "bedtime" to "Bedtime",
+            "wind_down" to "Wind down",
+            "movie_time" to "Movie time",
+            "getting_home" to "Getting home",
         )
         private val lights = mapOf(
-            "switch.bedroom_main_lightswitch" to LightingLight("Bedroom"),
-            "switch.dining_room_light" to LightingLight("Dining room"),
-            "switch.kitchen_light" to LightingLight("Kitchen"),
-            "switch.living_room_light" to LightingLight("Living room"),
-            "switch.stair_light" to LightingLight("Stair light"),
+            "bedroom" to "Bedroom",
+            "dining_room" to "Dining room",
+            "kitchen" to "Kitchen",
+            "living_room" to "Living room",
+            "stairway" to "Stair light",
         )
     }
 }
-
-private data class LightingPreset(val name: String, val lightsOn: Set<String>)
-private data class LightingLight(val name: String)

@@ -8,10 +8,7 @@ const _defaultServer = String.fromEnvironment(
   'GRACE_SERVER_URL',
   defaultValue: 'https://10.0.0.5:8443',
 );
-const _homeAssistantUrl = String.fromEnvironment('GRACE_HOME_ASSISTANT_URL');
-const _homeAssistantToken = String.fromEnvironment('GRACE_HOME_ASSISTANT_TOKEN');
-const _smartSwitchEntityId = String.fromEnvironment('GRACE_SMART_SWITCH_ENTITY_ID');
-const _smartSwitchName = String.fromEnvironment('GRACE_SMART_SWITCH_NAME', defaultValue: 'Smart light');
+const _widgetChannel = MethodChannel('com.jcconnol.grace_mobile/widget');
 
 const _bg = Color(0xff060a12);
 const _surface = Color(0xff0c1421);
@@ -21,22 +18,6 @@ const _muted = Color(0xff8ba0b6);
 const _cyan = Color(0xff55e8ff);
 const _violet = Color(0xff9b8cff);
 const _coral = Color(0xffff6d73);
-final _homeAssistant = HomeAssistantApi(url: _homeAssistantUrl, token: _homeAssistantToken, entityId: _smartSwitchEntityId, name: _smartSwitchName);
-
-const _lights = [
-  HomeAssistantLight('Bedroom Main Lightswitch', 'switch.bedroom_main_lightswitch'),
-  HomeAssistantLight('Dining Room Light', 'switch.dining_room_light'),
-  HomeAssistantLight('Kitchen Light', 'switch.kitchen_light'),
-  HomeAssistantLight('Living Room Light', 'switch.living_room_light'),
-  HomeAssistantLight('Stair Light', 'switch.stair_light'),
-];
-const _lightingPresets = [
-  LightingPreset('Bedtime', {}),
-  LightingPreset('Wind down', {'switch.bedroom_main_lightswitch'}),
-  LightingPreset('Movie time', {'switch.stair_light'}),
-  LightingPreset('Getting home', {'switch.dining_room_light', 'switch.kitchen_light', 'switch.living_room_light', 'switch.stair_light'}),
-];
-
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
   SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
@@ -72,7 +53,10 @@ class _GraceMobileAppState extends State<GraceMobileApp> {
   Future<void> _restoreSession() async {
     try {
       final user = await _api.get('/api/auth/me');
-      if (user['authenticated'] == true) setState(() => _user = user);
+      if (user['authenticated'] == true) {
+        await _api.configureWidget();
+        setState(() => _user = user);
+      }
     } catch (_) {
       setState(() => _error = 'G.R.A.C.E. could not reach the local server.');
     }
@@ -90,11 +74,17 @@ class _GraceMobileAppState extends State<GraceMobileApp> {
           useMaterial3: true,
         ),
         home: _user == null
-            ? LoginPage(api: _api, error: _error, onSignedIn: (user) => setState(() => _user = user))
+            ? LoginPage(api: _api, error: _error, onSignedIn: (user) {
+                unawaited(_api.configureWidget());
+                setState(() => _user = user);
+              })
             : GraceDashboard(
                 api: _api,
                 user: _user!,
-                onLogout: () => setState(() => _user = null),
+                onLogout: () {
+                  unawaited(_api.clearWidgetSession());
+                  setState(() => _user = null);
+                },
               ),
       );
 }
@@ -106,11 +96,14 @@ class GraceApi {
   final Map<String, String> _cookies = {};
 
   Uri _url(String path) => Uri.parse('${server.replaceFirst(RegExp(r'/+$'), '')}$path');
+  String get _cookieHeader => _cookies.entries.map((item) => '${item.key}=${item.value}').join('; ');
 
-  Future<dynamic> get(String path) => path == '/api/devices/smart-switch' ? _homeAssistant.getSwitch() : _request('GET', path);
-  Future<dynamic> post(String path, [Object? body]) => path == '/api/devices/smart-switch/toggle' ? _homeAssistant.toggle() : _request('POST', path, body);
+  Future<dynamic> get(String path) => _request('GET', path);
+  Future<dynamic> post(String path, [Object? body]) => _request('POST', path, body);
   Future<dynamic> put(String path, [Object? body]) => _request('PUT', path, body);
   Future<dynamic> delete(String path) => _request('DELETE', path);
+  Future<void> configureWidget() => _widgetChannel.invokeMethod('configureWidget', {'server': server, 'cookie': _cookieHeader});
+  Future<void> clearWidgetSession() => _widgetChannel.invokeMethod('clearWidgetSession');
 
   Future<dynamic> _request(String method, String path, [Object? body]) async {
     final client = HttpClient();
@@ -119,7 +112,7 @@ class GraceApi {
     try {
       final request = await client.openUrl(method, _url(path));
       request.headers.set(HttpHeaders.acceptHeader, 'application/json');
-      if (_cookies.isNotEmpty) request.headers.set(HttpHeaders.cookieHeader, _cookies.entries.map((item) => '${item.key}=${item.value}').join('; '));
+      if (_cookies.isNotEmpty) request.headers.set(HttpHeaders.cookieHeader, _cookieHeader);
       if (body != null) {
         request.headers.contentType = ContentType.json;
         request.write(jsonEncode(body));
@@ -145,58 +138,6 @@ class GraceApi {
     } finally {
       client.close(force: true);
     }
-  }
-}
-
-class HomeAssistantApi {
-  const HomeAssistantApi({required this.url, required this.token, required this.entityId, required this.name});
-  final String url;
-  final String token;
-  final String entityId;
-  final String name;
-
-  bool get isConfigured => url.isNotEmpty && token.isNotEmpty;
-
-  Future<Map<String, dynamic>> getSwitch([String? targetEntityId, String? fallbackName]) async {
-    final switchEntityId = targetEntityId ?? entityId;
-    final switchName = fallbackName ?? name;
-    if (!isConfigured || !switchEntityId.startsWith('switch.')) return _unavailable(switchName, 'Add Home Assistant build settings to the mobile app.');
-    try {
-      final data = Map<String, dynamic>.from(await _request('GET', '/api/states/$switchEntityId'));
-      return {'available': data['state'] == 'on' || data['state'] == 'off', 'name': data['attributes']?['friendly_name'] ?? switchName, 'state': data['state'] ?? 'unavailable', 'message': 'Connected directly to Home Assistant.'};
-    } catch (error) { return _unavailable(switchName, '$error'); }
-  }
-
-  Future<Map<String, dynamic>> toggle() async {
-    if (!isConfigured || !entityId.startsWith('switch.')) return _unavailable(name, 'Add Home Assistant build settings to the mobile app.');
-    try { await _request('POST', '/api/services/switch/toggle', {'entity_id': entityId}); return getSwitch(); }
-    catch (error) { return _unavailable(name, '$error'); }
-  }
-
-  Future<void> setSwitches(Set<String> entityIds, {required bool on}) async {
-    if (!isConfigured) throw GraceApiException('Add Home Assistant build settings to the mobile app.');
-    if (entityIds.isEmpty) return;
-    await _request('POST', '/api/services/switch/${on ? 'turn_on' : 'turn_off'}', {'entity_id': entityIds.toList()});
-  }
-
-  Map<String, dynamic> _unavailable(String switchName, String message) => {'available': false, 'name': switchName, 'state': 'unavailable', 'message': message};
-
-  Future<dynamic> _request(String method, String path, [Object? body]) async {
-    final client = HttpClient();
-    client.badCertificateCallback = (_, __, ___) => true;
-    client.connectionTimeout = const Duration(seconds: 8);
-    try {
-      final request = await client.openUrl(method, Uri.parse('${url.replaceFirst(RegExp(r'/+$'), '')}$path'));
-      request.headers.set(HttpHeaders.authorizationHeader, 'Bearer $token');
-      request.headers.set(HttpHeaders.acceptHeader, 'application/json');
-      if (body != null) { request.headers.contentType = ContentType.json; request.write(jsonEncode(body)); }
-      final response = await request.close().timeout(const Duration(seconds: 8));
-      final text = await utf8.decoder.bind(response).join().timeout(const Duration(seconds: 8));
-      if (response.statusCode < 200 || response.statusCode >= 300) throw GraceApiException('Home Assistant request failed (${response.statusCode}).');
-      return text.isEmpty ? <String, dynamic>{} : jsonDecode(text);
-    } on SocketException { throw GraceApiException('Unable to reach Home Assistant from this phone.'); }
-    on TimeoutException { throw GraceApiException('Home Assistant did not respond within 8 seconds.'); }
-    finally { client.close(force: true); }
   }
 }
 
@@ -364,7 +305,7 @@ class _HomePageState extends State<HomePage> {
     const SizedBox(height: 12),
     GridView.count(crossAxisCount: 2, shrinkWrap: true, physics: const NeverScrollableScrollPhysics(), mainAxisSpacing: 10, crossAxisSpacing: 10, childAspectRatio: 1.45, children: [ToolTile(icon: Icons.mic_none, title: 'Voice', subtitle: 'Talk with G.R.A.C.E.', onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => VoicePage(api: widget.api)))), ToolTile(icon: Icons.cloud_outlined, title: 'Weather', subtitle: 'Check conditions', onTap: () => _feature('weather')), ToolTile(icon: Icons.music_note, title: 'Music', subtitle: 'Open controls', onTap: () => _feature('music')), ToolTile(icon: Icons.auto_awesome, title: 'Create', subtitle: 'Generate an image', onTap: () => _feature('images'))]),
     const SizedBox(height: 10),
-    DeviceHomeCard(onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const LightingPage()))),
+    DeviceHomeCard(onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => LightingPage(api: widget.api)))),
     GraceCard(child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [const Icon(Icons.memory, color: _cyan), const SizedBox(width: 12), Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [const Text('SYSTEM STATE', style: TextStyle(color: _cyan, fontSize: 11, fontWeight: FontWeight.bold, letterSpacing: 1.5)), const SizedBox(height: 4), const Text('All systems nominal', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18)), const SizedBox(height: 6), Text(_summary, style: const TextStyle(color: _muted))]))])),
   ]));
   void _feature(String name) => Navigator.push(context, MaterialPageRoute(builder: (_) => FeaturePage(api: widget.api, feature: name)));
@@ -390,26 +331,16 @@ class DeviceHomeCard extends StatelessWidget {
       );
 }
 
-class HomeAssistantLight {
-  const HomeAssistantLight(this.name, this.entityId);
-  final String name;
-  final String entityId;
-}
-
-class LightingPreset {
-  const LightingPreset(this.name, this.lightsOn);
-  final String name;
-  final Set<String> lightsOn;
-}
-
 class LightingPage extends StatefulWidget {
-  const LightingPage({super.key});
+  const LightingPage({super.key, required this.api});
+  final GraceApi api;
   @override
   State<LightingPage> createState() => _LightingPageState();
 }
 
 class _LightingPageState extends State<LightingPage> {
-  Map<String, Map<String, dynamic>> _devices = {};
+  List<Map<String, dynamic>> _lights = [];
+  List<Map<String, dynamic>> _presets = [];
   bool _loading = true;
   bool _busy = false;
   String? _status;
@@ -419,10 +350,11 @@ class _LightingPageState extends State<LightingPage> {
   Future<void> _load() async {
     if (mounted) setState(() => _loading = true);
     try {
-      final devices = await Future.wait(_lights.map((light) async => MapEntry(light.entityId, await _homeAssistant.getSwitch(light.entityId, light.name))));
+      final data = Map<String, dynamic>.from(await widget.api.get('/api/lights'));
       if (mounted) setState(() {
-        _devices = Map.fromEntries(devices);
-        _status = _devices.values.every((device) => device['available'] != true) ? '${_devices.values.first['message']} Check the phone’s local-network connection and Home Assistant build settings.' : null;
+        _lights = List<Map<String, dynamic>>.from((data['lights'] as List).map((item) => Map<String, dynamic>.from(item)));
+        _presets = List<Map<String, dynamic>>.from((data['presets'] as List).map((item) => Map<String, dynamic>.from(item)));
+        _status = _lights.isNotEmpty && _lights.every((light) => light['available'] != true) ? 'G.R.A.C.E. could not reach the configured lights.' : null;
       });
     } catch (error) {
       if (mounted) setState(() => _status = '$error');
@@ -431,12 +363,12 @@ class _LightingPageState extends State<LightingPage> {
     }
   }
 
-  Future<void> _setLight(HomeAssistantLight light, bool on) async {
-    setState(() { _busy = true; _status = '${on ? 'Turning on' : 'Turning off'} ${light.name}…'; });
+  Future<void> _toggleLight(Map<String, dynamic> light) async {
+    setState(() { _busy = true; _status = 'Toggling ${light['name']}…'; });
     try {
-      await _homeAssistant.setSwitches({light.entityId}, on: on);
+      await widget.api.post('/api/lights/${light['id']}/toggle');
       await _load();
-      if (mounted) setState(() => _status = '${light.name} turned ${on ? 'on' : 'off'}.');
+      if (mounted) setState(() => _status = '${light['name']} toggled.');
     } catch (error) {
       if (mounted) setState(() => _status = '$error');
     } finally {
@@ -444,14 +376,12 @@ class _LightingPageState extends State<LightingPage> {
     }
   }
 
-  Future<void> _applyPreset(LightingPreset preset) async {
-    setState(() { _busy = true; _status = 'Applying ${preset.name}…'; });
+  Future<void> _applyPreset(Map<String, dynamic> preset) async {
+    setState(() { _busy = true; _status = 'Applying ${preset['name']}…'; });
     try {
-      final allLightIds = _lights.map((light) => light.entityId).toSet();
-      await _homeAssistant.setSwitches(allLightIds.difference(preset.lightsOn), on: false);
-      await _homeAssistant.setSwitches(preset.lightsOn, on: true);
+      await widget.api.post('/api/lights/presets/${preset['id']}');
       await _load();
-      if (mounted) setState(() => _status = '${preset.name} applied.');
+      if (mounted) setState(() => _status = '${preset['name']} applied.');
     } catch (error) {
       if (mounted) setState(() => _status = '$error');
     } finally {
@@ -466,14 +396,13 @@ class _LightingPageState extends State<LightingPage> {
       GraceCard(child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
         const Text('Lighting layouts', style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold)),
         const SizedBox(height: 22),
-        GridView.count(crossAxisCount: 2, shrinkWrap: true, physics: const NeverScrollableScrollPhysics(), mainAxisSpacing: 12, crossAxisSpacing: 12, childAspectRatio: 2.55, children: _lightingPresets.map((preset) => GraceButton(label: preset.name, primary: true, compact: true, busy: _busy, onPressed: _busy || _loading ? null : () => _applyPreset(preset))).toList()),
+        GridView.count(crossAxisCount: 2, shrinkWrap: true, physics: const NeverScrollableScrollPhysics(), mainAxisSpacing: 12, crossAxisSpacing: 12, childAspectRatio: 2.55, children: _presets.map((preset) => GraceButton(label: '${preset['name']}', primary: true, compact: true, busy: _busy, onPressed: _busy || _loading ? null : () => _applyPreset(preset))).toList()),
         const SizedBox(height: 22),
-        Text(_loading ? 'Loading lighting controls from Home Assistant…' : 'Choose a layout or control a light below. Changes are sent directly to Home Assistant.', style: const TextStyle(color: _muted, fontSize: 17)),
+        Text(_loading ? 'Loading lighting controls from G.R.A.C.E.…' : 'Choose a layout or control a light below. Changes use the same configuration as the web dashboard.', style: const TextStyle(color: _muted, fontSize: 17)),
       ])),
-      if (_loading) ..._lights.map((_) => const LightingSkeletonCard()) else ..._lights.map((light) {
-        final device = _devices[light.entityId];
-        final isOn = device?['state'] == 'on';
-        return GraceCard(child: Row(children: [Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [const Text('INDIVIDUAL LIGHT', style: TextStyle(color: _cyan, fontSize: 11, fontWeight: FontWeight.bold, letterSpacing: 2)), const SizedBox(height: 8), Text('${device?['name'] ?? light.name}', style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold)), Text(device == null ? 'Loading…' : device['available'] == true ? (isOn ? 'On' : 'Off') : '${device['message']}', style: const TextStyle(color: _muted))])), const SizedBox(width: 12), GraceButton(label: isOn ? 'Turn off' : 'Turn on', primary: !isOn, compact: true, busy: _busy, onPressed: !_busy && device?['available'] == true ? () => _setLight(light, !isOn) : null)]));
+      if (_loading) ...List.generate(5, (_) => const LightingSkeletonCard()) else ..._lights.map((light) {
+        final isOn = light['state'] == 'on';
+        return GraceCard(child: Row(children: [Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [const Text('INDIVIDUAL LIGHT', style: TextStyle(color: _cyan, fontSize: 11, fontWeight: FontWeight.bold, letterSpacing: 2)), const SizedBox(height: 8), Text('${light['name']}', style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold)), Text(light['available'] == true ? (isOn ? 'On' : 'Off') : '${light['message']}', style: const TextStyle(color: _muted))])), const SizedBox(width: 12), GraceButton(label: isOn ? 'Turn off' : 'Turn on', primary: !isOn, compact: true, busy: _busy, onPressed: !_busy && light['available'] == true ? () => _toggleLight(light) : null)]));
       }),
       if (_status != null) Padding(padding: const EdgeInsets.all(8), child: Text(_status!, style: const TextStyle(color: _coral))),
     ])))));
@@ -545,7 +474,10 @@ class AccountPage extends StatelessWidget {
   Future<void> _serverDialog(BuildContext context) async {
     final field = TextEditingController(text: api.server);
     final value = await showDialog<String>(context: context, builder: (_) => AlertDialog(title: const Text('G.R.A.C.E. server'), content: TextField(controller: field, decoration: const InputDecoration(hintText: 'https://10.0.0.5:8443')), actions: [TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')), FilledButton(onPressed: () => Navigator.pop(context, field.text), child: const Text('Save'))]));
-    if (value != null && Uri.tryParse(value)?.hasAuthority == true) api.server = value;
+    if (value != null && Uri.tryParse(value)?.hasAuthority == true) {
+      api.server = value;
+      await api.configureWidget();
+    }
     field.dispose();
   }
 }
