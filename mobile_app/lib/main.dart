@@ -392,7 +392,7 @@ class _LightingPageState extends State<LightingPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(body: OrbitBackground(child: SafeArea(child: GracePage(child: ListView(children: [
-      Row(children: [TextButton(onPressed: () => Navigator.pop(context), child: const Text('‹ Control')), const Spacer(), IconButton(onPressed: _busy || _loading ? null : _load, icon: _loading ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2)) : const Icon(Icons.refresh), tooltip: 'Refresh lights'), const Text('Lighting', style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold))]),
+      Row(children: [TextButton(onPressed: () => Navigator.pop(context), child: const Text('‹ Control')), const Spacer(), IconButton(onPressed: _busy || _loading ? null : _load, icon: _loading ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2)) : const Icon(Icons.refresh), tooltip: 'Refresh lights'), const Flexible(child: Text('Lighting', style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold)))]),
       GraceCard(child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
         const Text('Lighting layouts', style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold)),
         const SizedBox(height: 22),
@@ -402,7 +402,7 @@ class _LightingPageState extends State<LightingPage> {
       ])),
       if (_loading) ...List.generate(5, (_) => const LightingSkeletonCard()) else ..._lights.map((light) {
         final isOn = light['state'] == 'on';
-        return GraceCard(child: Row(children: [Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [const Text('INDIVIDUAL LIGHT', style: TextStyle(color: _cyan, fontSize: 11, fontWeight: FontWeight.bold, letterSpacing: 2)), const SizedBox(height: 8), Text('${light['name']}', style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold)), Text(light['available'] == true ? (isOn ? 'On' : 'Off') : '${light['message']}', style: const TextStyle(color: _muted))])), const SizedBox(width: 12), GraceButton(label: isOn ? 'Turn off' : 'Turn on', primary: !isOn, compact: true, busy: _busy, onPressed: !_busy && light['available'] == true ? () => _toggleLight(light) : null)]));
+        return GraceCard(child: Row(children: [Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [const Text('INDIVIDUAL LIGHT', style: TextStyle(color: _cyan, fontSize: 11, fontWeight: FontWeight.bold, letterSpacing: 2)), const SizedBox(height: 8), Text('${light['name']}', style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold)), Text(light['available'] == true ? (isOn ? 'On' : 'Off') : '${light['message']}', style: const TextStyle(color: _muted))])), const SizedBox(width: 12), SizedBox(width: 104, child: GraceButton(label: isOn ? 'Turn off' : 'Turn on', primary: !isOn, compact: true, busy: _busy, onPressed: !_busy && light['available'] == true ? () => _toggleLight(light) : null))]));
       }),
       if (_status != null) Padding(padding: const EdgeInsets.all(8), child: Text(_status!, style: const TextStyle(color: _coral))),
     ])))));
