@@ -38,7 +38,7 @@
       <form id="loginForm">
         <label class="field"><span>Username</span><input id="loginUsername" autocomplete="username" required></label>
         <label class="field"><span>Password</span><input id="loginPassword" type="password" autocomplete="current-password" required></label>
-        <label class="check"><input id="rememberMe" type="checkbox"> Keep me signed in on this device</label>
+        <p class="subtle">You will stay signed in on this device until you log out.</p>
         <button class="primary full" type="submit">Sign in</button>
       </form>
       <form id="signupForm" class="hidden">
@@ -88,7 +88,7 @@
     function renderRoute(replace=false){const route=location.hash.slice(1);if(route.startsWith('feature/'))return openFeature(route.slice(8),{replace});navigate(route,{replace});}
     function authTab(signup){$('loginForm').classList.toggle('hidden',signup);$('signupForm').classList.toggle('hidden',!signup);$('signInTab').classList.toggle('active',!signup);$('signUpTab').classList.toggle('active',signup);$('authStatus').textContent=signup?'Create a local account to continue.':'G.R.A.C.E. is available on this server.';}
     $('signInTab').onclick=()=>authTab(false);$('signUpTab').onclick=()=>authTab(true);
-    $('loginForm').onsubmit=async event=>{event.preventDefault();$('authStatus').textContent='Verifying…';try{const user=await api('/api/auth/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({username:$('loginUsername').value,password:$('loginPassword').value,remember_me:$('rememberMe').checked})});showApp(user);}catch(error){$('authStatus').textContent=error.message;}};
+    $('loginForm').onsubmit=async event=>{event.preventDefault();$('authStatus').textContent='Verifying…';try{const user=await api('/api/auth/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({username:$('loginUsername').value,password:$('loginPassword').value})});showApp(user);}catch(error){$('authStatus').textContent=error.message;}};
     $('signupForm').onsubmit=async event=>{event.preventDefault();$('authStatus').textContent='Creating account…';try{await api('/api/auth/signup',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({username:$('signupUsername').value,password:$('signupPassword').value})});$('loginUsername').value=$('signupUsername').value;authTab(false);$('authStatus').textContent='Account created. Sign in when ready.';}catch(error){$('authStatus').textContent=error.message;}};
     document.addEventListener('click',event=>{const target=event.target.closest('[data-go],[data-feature]');if(!target)return;if(target.dataset.go)navigate(target.dataset.go);if(target.dataset.feature)openFeature(target.dataset.feature);});$('accountButton').onclick=()=>navigate('account');
     async function loadHome(){try{const data=await api('/api/status');$('systemSummary').textContent=`${data.memory_count} memories · watch mode ${data.watch_mode?'active':'standing by'} · music ${data.music.status}`;}catch(error){$('systemSummary').textContent=error.message;}}

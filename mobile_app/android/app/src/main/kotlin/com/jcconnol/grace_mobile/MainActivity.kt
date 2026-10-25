@@ -23,6 +23,13 @@ class MainActivity : FlutterActivity() {
                         .apply()
                     result.success(null)
                 }
+                "getStoredSession" -> {
+                    val preferences = getSharedPreferences(WIDGET_PREFERENCES, Context.MODE_PRIVATE)
+                    result.success(mapOf(
+                        "server" to preferences.getString("server", "").orEmpty(),
+                        "cookie" to preferences.getString("cookie", "").orEmpty(),
+                    ))
+                }
                 else -> result.notImplemented()
             }
         }

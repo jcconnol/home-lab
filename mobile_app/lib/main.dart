@@ -52,6 +52,7 @@ class _GraceMobileAppState extends State<GraceMobileApp> {
 
   Future<void> _restoreSession() async {
     try {
+      await _api.restoreSession();
       final user = await _api.get('/api/auth/me');
       if (user['authenticated'] == true) {
         await _api.configureWidget();
@@ -104,6 +105,18 @@ class GraceApi {
   Future<dynamic> delete(String path) => _request('DELETE', path);
   Future<void> configureWidget() => _widgetChannel.invokeMethod('configureWidget', {'server': server, 'cookie': _cookieHeader});
   Future<void> clearWidgetSession() => _widgetChannel.invokeMethod('clearWidgetSession');
+  Future<void> restoreSession() async {
+    final stored = await _widgetChannel.invokeMapMethod<String, dynamic>('getStoredSession');
+    final storedServer = stored?['server'] as String? ?? '';
+    final storedCookie = stored?['cookie'] as String? ?? '';
+    if (storedServer.isNotEmpty) server = storedServer;
+    for (final part in storedCookie.split(';')) {
+      final separator = part.indexOf('=');
+      if (separator > 0) {
+        _cookies[part.substring(0, separator).trim()] = part.substring(separator + 1).trim();
+      }
+    }
+  }
 
   Future<dynamic> _request(String method, String path, [Object? body]) async {
     final client = HttpClient();
@@ -203,7 +216,6 @@ class _LoginPageState extends State<LoginPage> {
   final _username = TextEditingController();
   final _password = TextEditingController();
   bool _signup = false;
-  bool _remember = false;
   bool _busy = false;
   String? _status;
 
@@ -215,7 +227,7 @@ class _LoginPageState extends State<LoginPage> {
         await widget.api.post('/api/auth/signup', {'username': _username.text.trim(), 'password': _password.text});
         setState(() { _signup = false; _status = 'Account created. Sign in when ready.'; });
       } else {
-        final user = Map<String, dynamic>.from(await widget.api.post('/api/auth/login', {'username': _username.text.trim(), 'password': _password.text, 'remember_me': _remember}));
+        final user = Map<String, dynamic>.from(await widget.api.post('/api/auth/login', {'username': _username.text.trim(), 'password': _password.text}));
         widget.onSignedIn(user);
       }
     } catch (error) {
@@ -241,7 +253,7 @@ class _LoginPageState extends State<LoginPage> {
                     Row(children: [Expanded(child: GraceButton(label: 'Sign in', selected: !_signup, onPressed: () => setState(() => _signup = false))), const SizedBox(width: 6), Expanded(child: GraceButton(label: 'Create account', selected: _signup, onPressed: () => setState(() => _signup = true)))]),
                     GraceField(controller: _username, label: 'Username'),
                     GraceField(controller: _password, label: 'Password', obscure: true),
-                    if (!_signup) SwitchListTile.adaptive(contentPadding: EdgeInsets.zero, title: const Text('Keep me signed in', style: TextStyle(fontSize: 14, color: _muted)), value: _remember, onChanged: (value) => setState(() => _remember = value)),
+                    if (!_signup) const Padding(padding: EdgeInsets.symmetric(vertical: 12), child: Text('You will stay signed in on this device until you log out.', style: TextStyle(fontSize: 14, color: _muted))),
                     GraceButton(label: _signup ? 'Create account' : 'Sign in', primary: true, busy: _busy, onPressed: _submit),
                     if (_status ?? widget.error case final text?) Padding(padding: const EdgeInsets.only(top: 14), child: Text(text, style: const TextStyle(color: _muted))),
                   ]),

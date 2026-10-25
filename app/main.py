@@ -107,7 +107,7 @@ class LightSettingsUpdate(BaseModel):
 class LoginRequest(BaseModel):
     username: str
     password: str
-    remember_me: bool = False
+    remember_me: bool = True
 
 
 class SignupRequest(BaseModel):
@@ -299,13 +299,12 @@ def login(credentials: LoginRequest, request: Request) -> JSONResponse:
         return JSONResponse({"error": "Invalid admin credentials."}, status_code=401)
     token = secrets.token_urlsafe(32)
     now = datetime.now(timezone.utc)
-    duration = timedelta(days=SESSION_DAYS if credentials.remember_me else 1)
-    state.sessions.append({**user, "session_id": secrets.token_urlsafe(12), "token_hash": _token_hash(token), "created_at": now.isoformat(), "last_used_at": now.isoformat(), "expires_at": (now + duration).isoformat(), "absolute_expires_at": (now + timedelta(days=SESSION_MAX_DAYS)).isoformat(), "persistent": credentials.remember_me})
+    duration = timedelta(days=SESSION_DAYS)
+    state.sessions.append({**user, "session_id": secrets.token_urlsafe(12), "token_hash": _token_hash(token), "created_at": now.isoformat(), "last_used_at": now.isoformat(), "expires_at": (now + duration).isoformat(), "absolute_expires_at": (now + timedelta(days=SESSION_MAX_DAYS)).isoformat(), "persistent": True})
     state._save()
     response = JSONResponse({"authenticated": True, **user})
     cookie_options = {"httponly": True, "samesite": "lax", "secure": request.url.scheme == "https", "path": "/"}
-    if credentials.remember_me:
-        cookie_options["max_age"] = SESSION_DAYS * 86400
+    cookie_options["max_age"] = SESSION_DAYS * 86400
     response.set_cookie(SESSION_COOKIE, token, **cookie_options)
     return response
 
