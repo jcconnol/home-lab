@@ -1,0 +1,16 @@
+{
+  "nodes": [
+    {
+      "id": "tower",
+      "name": "Tower",
+      "status": "reachable",
+      "checked_at": "2026-01-01T00:00:00Z"
+    },
+    {
+      "id": "camera",
+      "name": "Camera",
+      "status": "unreachable",
+      "checked_at": "2026-01-01T00:00:00Z"
+    }
+  ]
+}

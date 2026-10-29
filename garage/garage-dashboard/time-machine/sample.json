@@ -1,0 +1,12 @@
+[
+  {
+    "timestamp": "2026-10-28T12:00:00Z",
+    "source": "tower",
+    "event": "cpu_high"
+  },
+  {
+    "timestamp": "2026-10-28T12:00:20Z",
+    "source": "grace",
+    "event": "request_slow"
+  }
+]

@@ -18,6 +18,10 @@ Open `http://localhost:8000`. Without OpenCV and Ultralytics installed, the app 
 
 The dashboard now includes a workflow guide and a `JOHNS_TODO` handoff file, both reachable from the UI and downloadable as markdown. The frontend also registers as a PWA, so you can install it from the browser and open the local server on your phone with `http://<your-computer-ip>:8000` while you are on the same network.
 
+## Garage device projects
+
+`garage/` contains a [browser dashboard for the Pi](garage/garage-dashboard/README.md) and independent projects including a persistent terrarium, network/GRACE checks, photo journal, messaging, and a two-agent battle arena. Each project has its own script and run instructions. Start with [the garage run guide](garage/README.md); remaining device interfaces and live integrations are tracked in the idea files.
+
 ## Android companion app
 
 `mobile_app/` contains a Flutter wrapper for the same dashboard plus an Android home-screen widget for the four lighting layouts. Build instructions are in [mobile_app/README.md](mobile_app/README.md). Once a release APK is copied to `app/web/downloads/grace-mobile.apk`, users can download it from **Account → Android app** in the dashboard.

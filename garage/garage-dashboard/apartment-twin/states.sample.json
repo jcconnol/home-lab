@@ -1,0 +1,10 @@
+[
+  {
+    "entity_id": "light.example",
+    "state": "on",
+    "attributes": {
+      "brightness": 128
+    },
+    "last_updated": "2026-01-01T00:00:00Z"
+  }
+]

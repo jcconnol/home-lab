@@ -1,0 +1,11 @@
+{
+  "services": [
+    {
+      "id": "grace",
+      "name": "GRACE API",
+      "host": "127.0.0.1",
+      "port": 8000
+    }
+  ],
+  "relationships": []
+}

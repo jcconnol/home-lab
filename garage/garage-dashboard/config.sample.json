@@ -1,0 +1,12 @@
+{
+  "grace_url": "",
+  "services": [],
+  "relationships": [],
+  "inputs": {
+    "anomaly_readings": null,
+    "apartment_layout": null,
+    "apartment_states": null,
+    "satellite_passes": null,
+    "events": null
+  }
+}

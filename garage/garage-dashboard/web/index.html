@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Garage / Mission control</title>
+  <link rel="stylesheet" href="/style.css">
+  <script src="/app.js" defer></script>
+</head>
+<body>
+  <aside>
+    <a class="brand" href="#overview"><span class="brand-mark">G<span> / </span></span><span>GARAGE LAB<small>MISSION CONTROL</small></span></a>
+    <p class="nav-label">YOUR OBSERVATORY</p>
+    <nav aria-label="Dashboard modes" id="navigation"></nav>
+    <div class="sidebar-bottom"><span class="indicator"></span> PRIVATE / LOCAL FIRST<p>Small devices. Big experiments.</p></div>
+  </aside>
+  <main>
+    <header><div><span class="eyebrow">HOME LAB / GARAGE</span><h1 id="title">Mission control</h1><p id="subtitle">A little window into your very unusual lab.</p></div><div class="clock"><strong id="clock">--:--</strong><span id="connection">Connecting…</span></div></header>
+    <div id="notice" class="notice" role="status" hidden></div>
+    <form id="login" class="panel login" hidden><h2>Connect to your lab</h2><p>Enter the dashboard access key configured on the host.</p><label>Access key<input id="password" type="password" required autocomplete="current-password"></label><button type="submit">Sign in</button></form>
+    <section id="content" aria-live="polite"><div class="panel">Connecting to the dashboard host…</div></section>
+    <footer><span>GARAGE LAB <span class="muted">/ independent of GRACE</span></span><span id="updated">Waiting for first check</span></footer>
+  </main>
+</body>
+</html>

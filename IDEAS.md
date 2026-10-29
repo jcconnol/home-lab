@@ -40,6 +40,10 @@ The ideas below remain grouped by domain for readability. This ranking orders ev
 
 ## Newly requested ideas
 
+### Garage lab and device fleet
+
+See [garage/IDEAS.md](garage/IDEAS.md) for garage monitoring, voice greetings, remote check-in, possible roles for the Pis, old Mac, and phones, and ambitious lab experiments. The garage is a multi-device project within this monorepo.
+
 ### Voice conversation (Level 2 - Moderate)
 
 Let the user talk to Grace from the phone and hear Grace's response without typing. Start with an explicit push-to-talk control in the mobile web app/PWA: capture a short voice message, convert it to text, send the text through the existing Grace chat flow, and play Grace's response using text-to-speech.

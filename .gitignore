@@ -12,4 +12,5 @@ models/*.pt
 logs/
 scripts/grace-python-path.txt
 app/web/downloads/*.apk
+garage/**/runtime/
 
