@@ -30,6 +30,40 @@ Treat the old phones as individually named devices with different capabilities, 
 - Keep the referee independent of model claims and score observable outcomes. For moving hardware, bound speed/travel, provide a stop control, and stop on stale observations or lost connection.
 - First milestone: two separately authenticated agents complete and replay a software match. Test those clients on the actual phones before adding models or motors.
 
+## Phone-to-phone throughput competition
+
+- Pair two or more phones for timed transfers in both directions, then compare useful bytes delivered, latency under load, fairness, retransmissions where observable, and energy/temperature readings where supported.
+- Add tournament modes: fastest verified file transfer, best throughput within a bandwidth budget, or lowest latency while both sides send traffic. Verify received content rather than trusting a sender's claimed score.
+- Record whether the path is direct Wi-Fi, through the access point, or through a VPN/relay. Shared radio airtime, signal strength, and background traffic can affect results independently of the phone's software.
+- First milestone: one short, rate-limited transfer between two explicitly paired phones, with byte counts, duration, and a dashboard result. No throughput generator is implemented yet.
+
+## Chess with a model on each phone
+
+- Each phone runs its own chess engine or compatible small model and sends moves to a shared referee. Keep inference local to the phones when testing that mode; label tower/cloud-assisted entrants separately.
+- The referee owns board state, legal-move validation, clocks, draw rules, and results. Invalid model moves should trigger a defined retry/time penalty rather than change the board.
+- Compare dedicated chess engines, language models, and hybrid strategies under equal time or compute budgets. Save move history and PGN replays for the Pi dashboard.
+- First milestone: two agents finish a legal game through the referee, with a replay and explicit handling of invalid moves and disconnections. Phone inference support remains to confirm.
+
+## Isolated network attack-and-defense arena
+
+- Explore phone-versus-phone bandwidth competition, connection/resource exhaustion, and recovery as controlled lab matches against deliberately provisioned test services on owned devices.
+- Put the contestants on a separate test network with an explicit destination allowlist. Keep the household network, Home Assistant, GRACE's normal services, and unrelated internet hosts outside the arena.
+- A referee sets traffic, connection, duration, and resource budgets, monitors both contestants and the network, and provides an independent stop control. Stop when a budget is exceeded or monitoring is lost.
+- Score useful service availability, response latency, successful legitimate requests, detection time, and recovery time. Start with bounded load tests and synthetic failure injection before exploring more adversarial strategies.
+- Preserve match logs and distinguish actual target failure from a congested shared access point or failed observer. Models may choose from approved test actions; they do not get unrestricted network or shell access.
+- First milestone: a short bounded load test against one disposable lab service, verified automatic stop, and a recovery report. This is an idea only; no attack or exhaustion tooling is implemented or run here.
+
+## AI operator for the old-device fleet
+
+- Let a local or cloud AI coordinate explicitly enrolled phones, the old Mac, and Pis: open approved websites, click through test flows, run approved jobs, and gather screenshots, page text, browser errors, timings, and device-health information.
+- Use actual old-device browsers to test responsive layouts, touch targets, compatibility, and performance. A desktop browser resized to phone dimensions is a separate test category, not a substitute for the physical phone.
+- Keep a coordinator on the tower or another supported host, with a small authenticated device agent or supported automation connection on each device. Check the OS and browser's automation capabilities before choosing adapters.
+- Give jobs a device, allowed sites/actions, time limit, expected result, and artifact destination. Record what the operator attempted, what actually happened, and why it stopped; report offline devices and unsupported actions clearly.
+- Begin with read-only inspection and test accounts. Require explicit approval for purchases, sending messages, destructive changes, or other consequential actions; website content cannot expand the operator's permissions.
+- Keep credentials on the device or in an appropriate secret store. For cloud models, explicitly choose what screenshots/page content may leave the network and redact sensitive material before uploading.
+- Treat website instructions and downloaded content as untrusted input. Separate observations from executable commands; use allowlisted job types rather than unrestricted AI-generated shell commands.
+- First milestone: ask the operator to open an owned test website on two enrolled devices, complete a harmless navigation flow, and return device-labeled screenshots and pass/fail evidence. Fleet control and cloud integration are not implemented yet.
+
 ## Shared photo journal
 
 - Capture photos from each phone and organize them by device, project, session, and capture time. Preserve the original image and distinguish capture time from upload time.
