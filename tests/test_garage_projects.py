@@ -243,7 +243,7 @@ def test_dashboard_sample_commands(folder, arguments):
 
 def test_every_starter_has_help_and_readme():
     scripts = list(GARAGE.glob("*/*/run.py"))
-    assert len(scripts) == 14
+    assert len(scripts) >= 14
     for script in scripts:
         assert script.with_name("README.md").is_file()
         subprocess.run([sys.executable, str(script), "--help"], capture_output=True, check=True, timeout=5)

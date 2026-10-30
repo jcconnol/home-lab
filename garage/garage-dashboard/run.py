@@ -23,7 +23,8 @@ ROOT = Path(__file__).resolve().parent
 
 
 def module(folder):
-    spec = importlib.util.spec_from_file_location(folder.replace("-", "_"), ROOT / folder / "run.py")
+    path = ROOT / folder if folder.endswith(".py") else ROOT / folder / "run.py"
+    spec = importlib.util.spec_from_file_location(folder.replace("-", "_").replace(".", "_"), path)
     result = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(result)
     return result
@@ -46,6 +47,7 @@ class Dashboard:
         self.stop = threading.Event()
         self.rng = random.Random()
         self.ecology = module("terrarium")
+        self.collectors = module("collectors.py").Collectors(config.get("live", {}), self.storage / "feeds")
         self.state_file = self.storage / "terrarium.json"
         self.terrarium = json.loads(self.state_file.read_text()) if self.state_file.exists() else {
             "tick": 0, "plants": 40, "next_id": 3, "paused": False,
@@ -93,6 +95,9 @@ class Dashboard:
             "name": "GRACE", "status": "not_configured"}
         network = module("network-radar").scan({"services": self.config.get("services", []),
                                                 "relationships": self.config.get("relationships", [])})
+        with self.lock:
+            previous_data = copy.deepcopy(self.data)
+            self.data.update(health=health, network=network, checked_at=now())
         modules = {}
         tasks = {
             "observatory": ("anomaly_readings", lambda data: module("anomaly-observatory").detect(data)),
@@ -105,6 +110,53 @@ class Dashboard:
                 modules[name] = {"status": "not_configured"} if data is None else {"status": "loaded", "data": compute(data)}
             except (ValueError, OSError, KeyError, TypeError) as error:
                 modules[name] = {"status": "error", "error": str(error)}
+        feeds = self.collectors.collect()
+        fleet = feeds.get("fleet", {})
+        if fleet.get("status") == "live":
+            for device in fleet["data"]["devices"]:
+                network["nodes"].append({"id": "fleet:" + device["id"], "name": device["name"],
+                                         "host": device["metadata"].get("host", device["name"]), "port": "agent",
+                                         "status": "reachable" if device["online"] else "unreachable", "check_kind": "heartbeat",
+                                         "checked_at": now(), "metadata": device["metadata"], "error": None})
+            addresses = {address: node["id"] for node in network["nodes"] for address in node.get("metadata", {}).get("addresses", [])}
+            for node in network["nodes"]:
+                for connection in node.get("metadata", {}).get("connections", []):
+                    remote = connection.get("remote", [])
+                    if remote and remote[0] in addresses and addresses[remote[0]] != node["id"]:
+                        edge = {"source": node["id"], "target": addresses[remote[0]], "kind": "observed agent connection"}
+                        if edge not in network["edges"]:
+                            network["edges"].append(edge)
+        readings = [row for feed in feeds.values() if feed.get("status") == "live" for row in feed.get("data", {}).get("readings", [])]
+        if feeds:
+            detected = module("anomaly-observatory").detect(readings, max_age=14400) if readings else []
+            for row in detected:
+                if row["metric"] == "Kp" and row["value"] >= 5 and row["status"] != "unknown":
+                    row.update(status="anomaly", explanation="NOAA planetary Kp is at least 5, the geomagnetic storm threshold. Local effects and aurora visibility are not guaranteed.")
+            existing = modules.get("observatory", {}).get("data", [])
+            modules["observatory"] = {"status": "loaded", "data": existing + detected, "sources": feeds}
+        satellite = feeds.get("satellites", {})
+        if satellite.get("status") == "live":
+            modules["space"] = {"status": "loaded", "data": satellite["data"]["passes"], "note": satellite["data"]["note"]}
+        assistant = feeds.get("home_assistant", {})
+        if assistant.get("status") == "live":
+            states = assistant["data"]["states"]
+            layout = self.read_input("apartment_layout")
+            if layout is None:
+                assignments = self.config.get("live", {}).get("home_assistant", {}).get("rooms", {})
+                assigned = {entity for entities in assignments.values() for entity in entities}
+                rooms = dict(assignments)
+                remaining = [row["entity_id"] for row in states if row["entity_id"] not in assigned]
+                if remaining:
+                    rooms["Unassigned devices"] = remaining
+                layout = {"rooms": [{"name": name, "width": 6, "height": max(4, (len(entities) + 2) // 3),
+                                     "devices": [{"entity_id": entity, "x": (index % 3) * 2 + 1, "y": index // 3 + 1} for index, entity in enumerate(entities)]}
+                                    for name, entities in rooms.items()]}
+            twin = module("apartment-twin").build_twin(layout, states, 3600)
+            for room in twin["rooms"]:
+                for device in room["devices"]:
+                    if device["freshness"] != "missing":
+                        device["freshness"] = "unavailable" if device["state"] in ("unavailable", "unknown") else "fresh"
+            modules["twin"] = {"status": "loaded", "data": twin, "note": "Read-only live Home Assistant polling. Entity last_updated is a state-change timestamp, not a heartbeat."}
         try:
             imported = self.read_input("events") or []
             if not isinstance(imported, list):
@@ -116,16 +168,20 @@ class Dashboard:
         except (ValueError, OSError, KeyError, TypeError) as error:
             imported = []
             modules["timeline"] = {"status": "error", "error": str(error)}
+        for feed in feeds.values():
+            if feed.get("status") == "live":
+                imported += feed.get("data", {}).get("events", [])
         with self.lock:
-            previous = {item["id"]: item["status"] for item in self.data["network"]["nodes"]}
+            previous = {item["id"]: item["status"] for item in previous_data["network"]["nodes"]}
             for item in network["nodes"]:
                 if item["id"] in previous and previous[item["id"]] != item["status"]:
                     self.events.append({"timestamp": now(), "source": item["id"], "event": item["status"]})
-            if self.data["checked_at"] and self.data["health"]["status"] != health["status"]:
+            if previous_data["checked_at"] and previous_data["health"]["status"] != health["status"]:
                 self.events.append({"timestamp": now(), "source": "grace", "event": health["status"]})
             self.events = self.events[-500:]
             self.save(self.events_file, self.events)
-            events = sorted(self.events + imported, key=lambda event: datetime.fromisoformat(event["timestamp"].replace("Z", "+00:00")))
+            unique = {(event.get("source"), event["timestamp"], event.get("event")): event for event in self.events + imported}
+            events = sorted(unique.values(), key=lambda event: datetime.fromisoformat(event["timestamp"].replace("Z", "+00:00")))
             modules["detective"] = {"status": "loaded", "data": module("signal-detective").correlate(events[-100:], 60)[-50:]}
             self.data = {"health": health, "network": network, "modules": modules,
                          "checked_at": now(), "events": events[-500:]}
@@ -164,23 +220,26 @@ class Dashboard:
         return result
 
     def run(self):
-        next_check = next_tick = 0
-        while not self.stop.is_set():
-            clock = time.monotonic()
-            if clock >= next_check:
+        def checks():
+            while not self.stop.is_set():
                 try:
                     self.collect()
                 except Exception as error:
                     with self.lock:
                         self.data["collection_error"] = str(error)
-                next_check = time.monotonic() + self.interval
-            if clock >= next_tick:
+                self.stop.wait(self.interval)
+        collector = threading.Thread(target=checks, daemon=True)
+        collector.start()
+        with self.lock:
+            self.save(self.state_file, self.terrarium)
+        try:
+            while not self.stop.wait(self.tick_seconds):
                 with self.lock:
-                    if next_tick and not self.terrarium["paused"]:
+                    if not self.terrarium["paused"]:
                         self.ecology.advance(self.terrarium, self.rng)
-                    self.save(self.state_file, self.terrarium)
-                next_tick = time.monotonic() + self.tick_seconds
-            self.stop.wait(1)
+                        self.save(self.state_file, self.terrarium)
+        finally:
+            collector.join(timeout=1)
 
 
 def handler_factory(dashboard, password=""):

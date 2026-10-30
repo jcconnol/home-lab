@@ -1,0 +1,4 @@
+chess>=1.11,<2
+skyfield>=1.49,<2
+psutil>=6,<8
+Pillow>=11,<13

@@ -1,0 +1,11 @@
+{
+  "photo_quota_mb": 1024,
+  "allowed_origins": ["http://127.0.0.1:8790"],
+  "model": {
+    "url": "",
+    "name": "",
+    "cloud": false,
+    "allow_cloud_data": false,
+    "token_env": "GARAGE_MODEL_TOKEN"
+  }
+}

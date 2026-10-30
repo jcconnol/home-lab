@@ -2,6 +2,19 @@
   "grace_url": "",
   "services": [],
   "relationships": [],
+  "live": {
+    "enabled": false,
+    "location": {"name": "Home", "latitude": null, "longitude": null},
+    "weather": true,
+    "air": true,
+    "earthquakes": true,
+    "geomagnetic": true,
+    "lightning": false,
+    "lightning_url": "",
+    "satellites": false,
+    "fleet": {"enabled": false, "url": "", "token_env": "GARAGE_FLEET_KEY"},
+    "home_assistant": {"enabled": false, "url": "", "token_env": "GARAGE_HA_TOKEN", "entities": [], "rooms": {}}
+  },
   "inputs": {
     "anomaly_readings": null,
     "apartment_layout": null,

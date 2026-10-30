@@ -8,6 +8,9 @@ Treat the old phones as individually named devices with different capabilities, 
 - [Communication](communication/README.md): paired HTTP mailboxes and recipient acknowledgments.
 - [Game player](game-player/README.md): timestamp-checked action proposals; no hardware execution yet.
 - [Phone battle arena](battle-arena/README.md): a playable two-agent software arena with persistent rounds and example agents.
+- [Phone browser hub](hub/README.md): paired photo/message clients, battles, chess, split inference, bounded network tests, and reviewed operator jobs.
+- [Device operator](fleet-operator/README.md): enrolled desktop/CDP browser tests and host telemetry.
+- [Current release status](../READINESS.md): configuration requirements and hardware/model limitations.
 
 ## Several phones form one larger neural network
 
@@ -17,7 +20,7 @@ Treat the old phones as individually named devices with different capabilities, 
 - Distinguish aggregate memory capacity from speed: intermediate tensors, repeated token-by-token transfers, and heterogeneous phones can make a distributed model slower than a single host. Model size does not automatically equal better answers.
 - Keep a coordinator responsible for ordered execution, request IDs, tensor shape/type validation, timeouts, and reporting a missing stage. A disconnected phone should fail the request clearly rather than fabricate an output.
 - Later investigate pipeline scheduling, quantized activation transfer, and a dashboard showing which layers run on each phone, stage latency, and memory usage.
-- This is an experimental research idea; no distributed runtime or phone model deployment is implemented yet.
+- A [two-stage browser proof](distributed-network/README.md) now executes one layer on each device and verifies the output. A real large-model runtime and native phone model deployment are not implemented yet.
 - First milestone: two compatible phones execute separate stages of one small network, reproduce the reference output within a defined numeric tolerance, and report end-to-end latency.
 
 ## Two phones battle each other
@@ -35,7 +38,7 @@ Treat the old phones as individually named devices with different capabilities, 
 - Pair two or more phones for timed transfers in both directions, then compare useful bytes delivered, latency under load, fairness, retransmissions where observable, and energy/temperature readings where supported.
 - Add tournament modes: fastest verified file transfer, best throughput within a bandwidth budget, or lowest latency while both sides send traffic. Verify received content rather than trusting a sender's claimed score.
 - Record whether the path is direct Wi-Fi, through the access point, or through a VPN/relay. Shared radio airtime, signal strength, and background traffic can affect results independently of the phone's software.
-- First milestone: one short, rate-limited transfer between two explicitly paired phones, with byte counts, duration, and a dashboard result. No throughput generator is implemented yet.
+- The hub now implements a short bounded, integrity-checked relay transfer between two paired browser clients. Direct peer-to-peer Wi-Fi measurement and radio/energy instrumentation remain future work.
 
 ## Chess with a model on each phone
 
@@ -51,7 +54,7 @@ Treat the old phones as individually named devices with different capabilities, 
 - A referee sets traffic, connection, duration, and resource budgets, monitors both contestants and the network, and provides an independent stop control. Stop when a budget is exceeded or monitoring is lost.
 - Score useful service availability, response latency, successful legitimate requests, detection time, and recovery time. Start with bounded load tests and synthetic failure injection before exploring more adversarial strategies.
 - Preserve match logs and distinguish actual target failure from a congested shared access point or failed observer. Models may choose from approved test actions; they do not get unrestricted network or shell access.
-- First milestone: a short bounded load test against one disposable lab service, verified automatic stop, and a recovery report. This is an idea only; no attack or exhaustion tooling is implemented or run here.
+- The hub implements a time/request-bounded disposable fixture with intentional failures and a stop control. General attack/exhaustion tooling, arbitrary targets, and physical network isolation are not implemented or configured here.
 
 ## AI operator for the old-device fleet
 
@@ -62,7 +65,7 @@ Treat the old phones as individually named devices with different capabilities, 
 - Begin with read-only inspection and test accounts. Require explicit approval for purchases, sending messages, destructive changes, or other consequential actions; website content cannot expand the operator's permissions.
 - Keep credentials on the device or in an appropriate secret store. For cloud models, explicitly choose what screenshots/page content may leave the network and redact sensitive material before uploading.
 - Treat website instructions and downloaded content as untrusted input. Separate observations from executable commands; use allowlisted job types rather than unrestricted AI-generated shell commands.
-- First milestone: ask the operator to open an owned test website on two enrolled devices, complete a harmless navigation flow, and return device-labeled screenshots and pass/fail evidence. Fleet control and cloud integration are not implemented yet.
+- An enrolled worker now executes reviewed browser plans, returns screenshots/results, and reports telemetry. The optional Ollama-compatible planner needs a configured endpoint and credentials; cloud inference and physical-phone adapters are not live-verified. Actual phone OS/model details are still required.
 
 ## Shared photo journal
 

@@ -1,6 +1,6 @@
 # Garage mission control dashboard
 
-A lightweight browser dashboard served by one Python script. No pip/npm dependencies, GRACE server, GPU, or model runtime are required to run it. It can be hosted on the Pi or on the tower/Mac with the Pi acting as a browser display.
+A lightweight browser dashboard with a cyan field-terminal interface and an alien biosphere. The base dashboard needs no pip/npm dependencies, GRACE server, GPU, or model runtime. Optional live satellite/telemetry features use the garage environment installed below. It can be hosted on the Pi or on a supported tower/Mac with the Pi acting as a browser display. See [release readiness](../READINESS.md) for remaining hardware-specific work.
 
 ## Put it on the Pi now
 
@@ -23,9 +23,35 @@ Use a supported 32-bit Raspberry Pi OS release for older Pi 2 processors; check 
 - Science notebook with saved predictions and append-only observations.
 - GRACE HTTP availability/latency and explicit TCP service checks after configuration, with service-change history.
 - Network map with selectable nodes and a cosmetic fleet universe.
-- Data-driven anomaly, apartment, satellite schedule, correlation, and history views after supplying the relevant JSON files. These display imported data, not automatic live public feeds or a live Home Assistant subscription.
+- Anomaly, apartment, satellite, correlation, and history views support imported files or the live collectors described below. Source errors and stale/unknown observations remain visible.
 
 The individual CLI starters remain in their own folders. Run only one dashboard against its storage directory. The dashboard has its own terrarium and notebook storage, separate from the standalone CLI defaults.
+
+## Enable live feeds and device telemetry
+
+From the repository root:
+
+```sh
+python3 garage/install.py dashboard
+```
+
+This creates an isolated `garage/runtime/venv` and preserves any existing runtime config. Edit `garage/garage-dashboard/runtime/config.json`: set `live.enabled` true and supply your real latitude/longitude. Weather, regional modeled air quality, USGS earthquakes, and NOAA geomagnetic readings are cached for 15 minutes. Their attribution and source status are shown in the observatory.
+
+Set `live.satellites` true for actual ISS pass calculations; orbital data and the solar ephemeris are downloaded and cached. Predictions reject orbital elements older than 14 days. Potential visibility accounts for satellite sunlight and observer darkness, not cloud cover or local obstructions.
+
+For Home Assistant, set `live.home_assistant.enabled`, `url`, and room assignments such as `"rooms":{"Living room":["light.example"]}`. Set `GARAGE_HA_TOKEN` in the host environment. The dashboard polls read-only state every 30 seconds; it does not turn lights on or infer a floor plan. States without assignments are shown as unassigned.
+
+For enrolled devices, set `live.fleet.enabled`, its hub `url`, and `GARAGE_FLEET_KEY` to a paired device key. Host agents report resource use; browser-only phones report heartbeat/platform. Observed connection edges require agents explicitly started with `--connections`.
+
+Lightning requires `live.lightning=true` and a provider URL in `live.lightning_url` returning an array of `{id,timestamp,latitude,longitude}` reports. Supply authorized provider access separately. No provider is assumed or substituted with a weather forecast.
+
+Start with the installed environment:
+
+```sh
+garage/runtime/venv/bin/python garage/garage-dashboard/run.py --config garage/garage-dashboard/runtime/config.json
+```
+
+On Windows use `garage/runtime/venv/Scripts/python.exe`. No home location or secret is filled in automatically. References: [Open-Meteo](https://open-meteo.com/en/docs), [air quality](https://open-meteo.com/en/docs/air-quality-api), [USGS feeds](https://earthquake.usgs.gov/earthquakes/feed/v1.0/geojson.php), [NOAA SWPC](https://services.swpc.noaa.gov/products/), [Home Assistant REST API](https://developers.home-assistant.io/docs/api/rest/), [Skyfield satellite calculations](https://rhodesmill.org/skyfield/earth-satellites.html).
 
 ## Connect GRACE and devices
 
@@ -97,4 +123,4 @@ In PowerShell use `$env:GARAGE_DASHBOARD_KEY = 'your-secret'` instead. On the Pi
 
 ## Current limits
 
-No automatic public weather/earthquake/lightning/air-quality feeds, orbit calculations, Home Assistant subscription, CPU/GPU agents, phone camera streaming, or model/physical control. The UI exposes these as unconfigured or describes its measurement scope. The application is browser-tested locally; deployment on your actual Pi is the next hardware check.
+No automatic lightning-provider enrollment, Home Assistant control/context automation, pretrained phone LLM deployment, continuous phone camera streaming, voice identification, GPU monitoring, or physical actuation. Home Assistant uses polling, not an event subscription. The application is browser-tested locally; deployment on your actual Pi is the next hardware check. The full project status is in [READINESS.md](../READINESS.md).

@@ -3,6 +3,9 @@
 set -eu
 dashboard_dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 python_bin=$(command -v python3)
+if [ -x "$dashboard_dir/../runtime/venv/bin/python" ]; then
+    python_bin="$dashboard_dir/../runtime/venv/bin/python"
+fi
 if ! command -v systemctl >/dev/null 2>&1; then
     printf '%s\n' 'systemd is required. Use: sh start.sh'
     exit 1

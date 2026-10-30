@@ -3,6 +3,8 @@ from http.cookiejar import CookieJar
 import json
 import urllib.error
 import urllib.request
+import threading
+import time
 
 import pytest
 
@@ -102,3 +104,26 @@ def test_dashboard_login_and_cookie(tmp_path):
             assert "HttpOnly" in cookie and "SameSite=Strict" in cookie
         with opener.open(url + "/api/status") as response:
             assert json.load(response)["terrarium"]["tick"] == 0
+
+
+def test_slow_collector_does_not_pause_ecosystem(tmp_path):
+    app = dashboard(tmp_path)
+    app.tick_seconds = 0.03
+    entered, release = threading.Event(), threading.Event()
+    def slow_collect():
+        entered.set()
+        release.wait(3)
+    app.collect = slow_collect
+    worker = threading.Thread(target=app.run)
+    worker.start()
+    try:
+        assert entered.wait(1)
+        deadline = time.monotonic() + 2
+        while app.snapshot()["terrarium"]["tick"] < 2 and time.monotonic() < deadline:
+            time.sleep(0.01)
+        assert app.snapshot()["terrarium"]["tick"] >= 2
+    finally:
+        app.stop.set()
+        release.set()
+        worker.join(2)
+    assert not worker.is_alive()
