@@ -2,6 +2,8 @@
 import json
 import math
 import os
+import ssl
+import threading
 import time
 import urllib.parse
 import urllib.request
@@ -16,9 +18,19 @@ def utc(value=None):
     return parsed.replace(tzinfo=timezone.utc) if parsed.tzinfo is None else parsed
 
 
+def tls_context():
+    context = ssl.create_default_context()
+    try:
+        import certifi
+        context.load_verify_locations(cafile=certifi.where())
+    except ImportError:
+        pass
+    return context
+
+
 def fetch_json(url, headers=None):
-    request = urllib.request.Request(url, headers={"User-Agent": "GarageLab/1.0 (personal observatory)", **(headers or {})})
-    with urllib.request.urlopen(request, timeout=12) as response:
+    request = urllib.request.Request(url, headers={"User-Agent": "GarageObservatory/2.0 (+https://github.com/jcconnol/home-lab)", **(headers or {})})
+    with urllib.request.urlopen(request, timeout=12, context=tls_context()) as response:
         raw = response.read(8 * 1024 * 1024 + 1)
     if len(raw) > 8 * 1024 * 1024:
         raise ValueError("Source response exceeds 8 MiB")
@@ -32,6 +44,10 @@ def distance_km(lat1, lon1, lat2, lon2):
     return 6371 * 2 * math.asin(min(1, math.sqrt(h)))
 
 
+def source_time(value):
+    return datetime.fromtimestamp(value, timezone.utc) if isinstance(value, (float, int)) else utc(value)
+
+
 class Collectors:
     def __init__(self, config, storage, fetch=fetch_json):
         self.config, self.fetch = config, fetch
@@ -39,22 +55,56 @@ class Collectors:
         self.storage.mkdir(parents=True, exist_ok=True)
         self.cache_file = self.storage / "feed-cache.json"
         self.cache = json.loads(self.cache_file.read_text()) if self.cache_file.exists() else {}
+        self.cache_lock = threading.RLock()
+        self.key_locks = {}
+        self.astro_lock = threading.Lock()
+        self._astronomy = None
 
     def cached(self, key, work, ttl=900):
-        previous = self.cache.get(key, {})
-        if time.time() - previous.get("attempt", 0) < ttl:
-            return previous
-        try:
-            entry = {"status": "live", "data": work(), "fetched_at": utc().isoformat(), "attempt": time.time()}
-        except Exception as error:
-            entry = {"status": "error", "error": str(error), "attempt": time.time()}
-            if "data" in previous:
-                entry.update(data=previous["data"], fetched_at=previous.get("fetched_at"), stale=True)
-        self.cache[key] = entry
-        temporary = self.cache_file.with_suffix(".tmp")
-        temporary.write_text(json.dumps(self.cache), encoding="utf-8")
-        temporary.replace(self.cache_file)
-        return entry
+        with self.cache_lock:
+            key_lock = self.key_locks.setdefault(key, threading.RLock())
+        with key_lock:
+            with self.cache_lock:
+                previous = self.cache.get(key, {})
+            delay = ttl if previous.get("status") == "live" else min(3600, ttl * 2 ** min(previous.get("failures", 0), 4))
+            if time.time() - previous.get("attempt", 0) < delay:
+                return previous
+            try:
+                entry = {"status": "live", "data": work(), "fetched_at": utc().isoformat(), "attempt": time.time()}
+            except Exception as error:
+                entry = {"status": "error", "error": str(error), "attempt": time.time(), "failures": previous.get("failures", 0) + 1}
+                if "data" in previous:
+                    entry.update(data=previous["data"], fetched_at=previous.get("fetched_at"), stale=True)
+            with self.cache_lock:
+                self.cache[key] = entry
+                temporary = self.cache_file.with_suffix(".tmp")
+                temporary.write_text(json.dumps(self.cache), encoding="utf-8")
+                temporary.replace(self.cache_file)
+            return entry
+
+    def astronomy(self):
+        from skyfield.api import Loader
+        with self.astro_lock:
+            if self._astronomy is None:
+                loader = Loader(str(self.storage / "skyfield"))
+                ephemeris = Path(loader.directory) / "de421.bsp"
+                if not ephemeris.exists():
+                    temporary = ephemeris.with_suffix(".download")
+                    request = urllib.request.Request("https://ssd.jpl.nasa.gov/ftp/eph/planets/bsp/de421.bsp",
+                                                     headers={"User-Agent": "GarageObservatory/2.0 (+https://github.com/jcconnol/home-lab)"})
+                    size = 0
+                    with urllib.request.urlopen(request, timeout=20, context=tls_context()) as response, temporary.open("wb") as output:
+                        while True:
+                            chunk = response.read(65536)
+                            if not chunk:
+                                break
+                            size += len(chunk)
+                            if size > 32 * 1024**2:
+                                raise ValueError("Solar ephemeris exceeds expected download size")
+                            output.write(chunk)
+                    temporary.replace(ephemeris)
+                self._astronomy = (loader, loader.timescale(builtin=True), loader("de421.bsp"))
+            return self._astronomy
 
     def location(self):
         location = self.config.get("location")
@@ -67,22 +117,30 @@ class Collectors:
 
     def weather(self):
         lat, lon, name = self.location()
-        query = urllib.parse.urlencode({"latitude": lat, "longitude": lon, "current": "temperature_2m,pressure_msl,wind_speed_10m",
-                                        "hourly": "temperature_2m,pressure_msl,wind_speed_10m", "past_days": 2, "forecast_days": 1, "timezone": "UTC"})
+        query = urllib.parse.urlencode({"latitude": lat, "longitude": lon, "current": "temperature_2m,apparent_temperature,relative_humidity_2m,is_day,precipitation,weather_code,pressure_msl,wind_speed_10m,wind_direction_10m,wind_gusts_10m",
+                                        "hourly": "temperature_2m,pressure_msl,wind_speed_10m,precipitation_probability,weather_code,is_day",
+                                        "daily": "weather_code,temperature_2m_max,temperature_2m_min,sunrise,sunset,precipitation_probability_max",
+                                        "past_days": 2, "forecast_days": 7, "timezone": "auto", "timeformat": "unixtime"})
         data = self.fetch("https://api.open-meteo.com/v1/forecast?" + query)
         rows = []
-        current = utc(data["current"]["time"])
+        current = source_time(data["current"]["time"])
         for metric in ("temperature_2m", "pressure_msl", "wind_speed_10m"):
             unit = data["hourly_units"][metric]
             for timestamp, value in zip(data["hourly"]["time"], data["hourly"][metric]):
-                if value is not None and current - timedelta(hours=24) <= utc(timestamp) < current:
+                if value is not None and current - timedelta(hours=24) <= source_time(timestamp) < current:
                     rows.append({"source": "Open-Meteo modeled weather", "location": name, "metric": metric,
-                                 "unit": unit, "timestamp": utc(timestamp).isoformat(), "value": value})
+                                 "unit": unit, "timestamp": source_time(timestamp).isoformat(), "value": value})
             value = data["current"].get(metric)
             if value is not None:
                 rows.append({"source": "Open-Meteo modeled weather", "location": name, "metric": metric,
                              "unit": unit, "timestamp": current.isoformat(), "value": value})
-        return {"readings": rows, "source_url": "https://open-meteo.com/", "attribution": "Weather data by Open-Meteo.com (CC BY 4.0). Modeled estimates, not garage sensors."}
+        daily = dict(data.get("daily", {}))
+        # Open-Meteo's UNIX daily dates use the response's fixed UTC offset;
+        # applying future DST offsets in the browser can repeat/skip a weekday.
+        offset = data.get("utc_offset_seconds", 0)
+        daily["dates"] = [(source_time(value) + timedelta(seconds=offset)).date().isoformat() for value in daily.get("time", [])]
+        return {"readings": rows, "current": dict(data["current"], timestamp=current.isoformat()), "hourly": data["hourly"],
+                "daily": daily, "timezone": data.get("timezone", "UTC"), "current_units": data.get("current_units", {}), "source_url": "https://open-meteo.com/", "attribution": "Weather data by Open-Meteo.com (CC BY 4.0). Modeled estimates, not garage sensors."}
 
     def air(self):
         lat, lon, name = self.location()
@@ -99,7 +157,7 @@ class Collectors:
             if data["current"].get(metric) is not None:
                 rows.append({"source": "CAMS via Open-Meteo", "location": name, "metric": metric,
                              "unit": data["hourly_units"][metric], "timestamp": current.isoformat(), "value": data["current"][metric]})
-        return {"readings": rows, "source_url": "https://open-meteo.com/en/docs/air-quality-api", "attribution": "CAMS ENSEMBLE / CAMS GLOBAL via Open-Meteo (CC BY 4.0). Regional modeled air quality, not an indoor measurement."}
+        return {"readings": rows, "current": data["current"], "source_url": "https://open-meteo.com/en/docs/air-quality-api", "attribution": "CAMS ENSEMBLE / CAMS GLOBAL via Open-Meteo (CC BY 4.0). Regional modeled air quality, not an indoor measurement."}
 
     def earthquakes(self):
         lat, lon, name = self.location()
@@ -158,10 +216,9 @@ class Collectors:
         return {"states": selected, "polled_at": utc().isoformat(), "source_url": url}
 
     def satellites(self):
-        from skyfield.api import EarthSatellite, Loader, wgs84
+        from skyfield.api import EarthSatellite, wgs84
         lat, lon, name = self.location()
-        loader = Loader(str(self.storage / "skyfield"))
-        ts = loader.timescale(builtin=True)
+        _, ts, eph = self.astronomy()
         tle = self.cached("tle", lambda: self.fetch("https://celestrak.org/NORAD/elements/gp.php?CATNR=25544&FORMAT=json"), 21600)
         if tle["status"] != "live":
             raise ValueError("Current orbital elements unavailable: " + tle.get("error", "unknown error"))
@@ -179,7 +236,6 @@ class Collectors:
         end = ts.from_datetime(utc() + timedelta(days=2))
         times, events = satellite.find_events(observer, start, end, altitude_degrees=10)
         # Solar ephemeris is downloaded once and cached by Skyfield (~17 MiB).
-        eph = loader("de421.bsp")
         passes = []
         pending = None
         for instant, kind in zip(times, events):
@@ -208,6 +264,60 @@ class Collectors:
             raise ValueError("Fleet source needs live.fleet.url and a paired-device key in its token environment variable")
         state = self.fetch(url + "/api/state", {"Authorization": "Bearer " + token})
         return {"devices": state["devices"], "source_url": url, "note": "Enrolled agent/browser heartbeats; telemetry is available only when reported by a host agent."}
+
+    def aircraft(self):
+        lat, lon, name = self.location()
+        radius = float(self.config.get("aircraft_radius_nm", 40))
+        if not 5 <= radius <= 100:
+            raise ValueError("Aircraft radius must be 5..100 nautical miles")
+        data = self.fetch(f"https://api.adsb.lol/v2/point/{lat:.5f}/{lon:.5f}/{radius:g}")
+        if not isinstance(data.get("ac"), list):
+            raise ValueError("Aircraft source returned an unexpected format")
+        if isinstance(data.get("now"), (int, float)):
+            observed = source_time(data["now"] / 1000 if data["now"] > 1e12 else data["now"])
+            if abs((utc() - observed).total_seconds()) > 300:
+                raise ValueError("Aircraft provider snapshot is older than five minutes or future-dated")
+        aircraft = []
+        for plane in data["ac"]:
+            if plane.get("lat") is None or plane.get("lon") is None or plane.get("alt_baro") == "ground":
+                continue
+            if not isinstance(plane.get("seen_pos"), (int, float)) or plane["seen_pos"] > 120:
+                continue
+            distance = distance_km(lat, lon, float(plane["lat"]), float(plane["lon"]))
+            if distance > radius * 1.852:
+                continue
+            dlon = math.radians(float(plane["lon"]) - lon)
+            bearing = math.degrees(math.atan2(math.sin(dlon) * math.cos(math.radians(plane["lat"])),
+                                             math.cos(math.radians(lat)) * math.sin(math.radians(plane["lat"])) - math.sin(math.radians(lat)) * math.cos(math.radians(plane["lat"])) * math.cos(dlon))) % 360
+            aircraft.append({"id": plane.get("hex"), "callsign": str(plane.get("flight") or plane.get("r") or plane.get("hex") or "Unknown").strip(),
+                             "type": plane.get("t"), "latitude": plane["lat"], "longitude": plane["lon"], "distance_km": distance,
+                             "bearing": bearing, "altitude_ft": plane.get("alt_baro", plane.get("alt_geom")), "speed_knots": plane.get("gs"),
+                             "track": plane.get("track"), "age_seconds": plane["seen_pos"]})
+        return {"aircraft": sorted(aircraft, key=lambda row: row["distance_km"])[:100], "radius_nm": radius, "location": name,
+                "source_url": "https://www.adsb.lol/", "attribution": "Aircraft positions: adsb.lol, ODbL 1.0. Coverage and freshness depend on volunteer receivers; this is not complete airspace coverage."}
+
+    def iss(self):
+        from skyfield.api import EarthSatellite, wgs84
+        from sgp4 import omm
+        from sgp4.api import Satrec
+        _, ts, eph = self.astronomy()
+        elements = self.cached("tle", lambda: self.fetch("https://celestrak.org/NORAD/elements/gp.php?CATNR=25544&FORMAT=json"), 21600)
+        if elements["status"] != "live":
+            raise ValueError("Current orbital elements are unavailable")
+        record = Satrec()
+        omm.initialize(record, elements["data"][0])
+        satellite = EarthSatellite.from_satrec(record, ts)
+        age = abs((utc() - satellite.epoch.utc_datetime()).total_seconds()) / 86400
+        if age > 14:
+            raise ValueError("ISS orbital elements are older than 14 days")
+        instant = ts.from_datetime(utc())
+        position = wgs84.subpoint(satellite.at(instant))
+        lat, lon, name = self.location()
+        alt, az, distance = (satellite - wgs84.latlon(lat, lon)).at(instant).altaz()
+        return {"latitude": float(position.latitude.degrees), "longitude": float(position.longitude.degrees),
+                "altitude_km": float(position.elevation.km), "observer_elevation": float(alt.degrees), "observer_azimuth": float(az.degrees),
+                "distance_km": float(distance.km), "computed_at": utc().isoformat(), "element_epoch": satellite.epoch.utc_datetime().isoformat(),
+                "source_url": "https://celestrak.org/", "location": name, "note": "Current position calculated from orbital elements, not a live onboard GPS feed."}
 
     def collect(self):
         result = {}

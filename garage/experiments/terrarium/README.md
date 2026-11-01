@@ -1,4 +1,6 @@
-# Artificial-life terrarium
+# Archived artificial-life experiment
+
+This standalone experiment is archived and is not part of Garage Observatory. Existing saved data has not been deleted.
 
 Run from this folder with Python 3.11+ (standard library only):
 

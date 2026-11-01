@@ -1,12 +1,8 @@
 # Garage dashboard ideas
 
-Use the Pi 2 and its monitor as a lightweight dashboard terminal. The tower or supported Mac collects data, stores history, runs simulations, and prepares updates. Start with a simple 2D browser display; measure performance on the actual Pi before adding animation or large graphs. Provide selectable modes and an optional rotation, with real alerts visible across modes. These are proposed features, not existing integrations.
+The current [Garage Observatory](README.md) focuses on weather, aircraft, ISS and hourly 3D solar-system positions. It is independent of GRACE and the phone projects. The following list is an experiment backlog, not installed dashboard features. The terrarium is archived.
 
-## Dashboard idea list
-
-Independent Python starters live in the folders below. A [browser dashboard](README.md) now renders these modes, with a working terrarium, notebook, and configured service checks. Imported-data modes still need their source files; automatic live-feed integrations remain future work. See [the garage run guide](../README.md) for commands and current limitations.
-
-1. [Artificial-life terrarium](terrarium/README.md).
+1. [Artificial-life terrarium](../experiments/terrarium/README.md).
 2. [Local and planetary anomaly observatory](anomaly-observatory/README.md).
 3. [Digital radar for the home network](network-radar/README.md).
 4. [Satellite and space command center](space-command/README.md).
@@ -91,4 +87,4 @@ An interactive map of owned computers, services, containers, and IoT devices, wi
 - **Time machine wall:** scrub through a day of garage events, network state, weather, and terrarium history, with independent source timestamps and visible gaps.
 - **Daily science mission:** pick one observable event, predict an outcome, collect readings or an observation, and compare the prediction with what happened.
 
-Build these as independent modes so a failed public feed or paused terrarium cannot interrupt garage monitoring. A sensible dashboard prototype is device status plus the terrarium, followed by one anomaly feed and then satellite passes.
+Build these as independent modes so a failed public feed or paused terrarium cannot interrupt garage monitoring. The current dashboard prioritizes useful local weather and sky information.

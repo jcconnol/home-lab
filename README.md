@@ -20,11 +20,11 @@ The dashboard now includes a workflow guide and a `JOHNS_TODO` handoff file, bot
 
 ## Garage device projects
 
-`garage/` contains a [browser dashboard for the Pi](garage/garage-dashboard/README.md) and independent projects including a persistent terrarium, network/GRACE checks, photo journal, messaging, and a two-agent battle arena. Each project has its own script and run instructions. Start with [the garage run guide](garage/README.md); remaining device interfaces and live integrations are tracked in the idea files.
+`garage/` contains the independent [Garage Observatory Pi display](garage/garage-dashboard/README.md) for weather, aircraft, ISS and 3D solar-system positions, plus separate phone experiments. Start with [the garage run guide](garage/README.md).
 
 ## Android companion app
 
-`mobile_app/` contains a Flutter wrapper for the same dashboard plus an Android home-screen widget for the four lighting layouts. Build instructions are in [mobile_app/README.md](mobile_app/README.md). Once a release APK is copied to `app/web/downloads/grace-mobile.apk`, users can download it from **Account → Android app** in the dashboard.
+`mobile_app/` contains a Flutter wrapper for the same dashboard plus an Android home-screen widget for the four lighting layouts. Build instructions are in [mobile_app/README.md](mobile_app/README.md). Once a release APK is copied to `app/web/downloads/grace-mobile.apk`, users can download it from **Account â†’ Android app** in the dashboard.
 
 ## HTTPS and phone microphone setup
 
@@ -62,7 +62,7 @@ See [IDEAS.md](IDEAS.md) for the longer-term robotics, interface, networking, pe
 
 The Raspberry Pi can connect the Third Reality switch to G.R.A.C.E. through Home Assistant. The USB dongle is the Zigbee coordinator; pair the switch to Home Assistant using either ZHA or Zigbee2MQTT, but do not run both coordinators against the same dongle/network.
 
-With ZHA, add the integration under **Settings → Devices & services**, select the USB dongle, then use **Add device**. Put the switch into pairing mode by holding its button until the blue LED flashes rapidly, then select the discovered device. Zigbee2MQTT follows the same pairing concept: configure the dongle as its coordinator, enable **Permit join**, and pair the switch while its LED is flashing.
+With ZHA, add the integration under **Settings â†’ Devices & services**, select the USB dongle, then use **Add device**. Put the switch into pairing mode by holding its button until the blue LED flashes rapidly, then select the discovered device. Zigbee2MQTT follows the same pairing concept: configure the dongle as its coordinator, enable **Permit join**, and pair the switch while its LED is flashing.
 
 After pairing, create a Home Assistant long-lived access token from your user profile and set these values in G.R.A.C.E.'s `.env`:
 

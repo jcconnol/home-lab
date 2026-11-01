@@ -24,7 +24,8 @@ def main():
     python = directory / ("Scripts/python.exe" if platform.system() == "Windows" else "bin/python")
     if not python.exists():
         venv.EnvBuilder(with_pip=True).create(directory)
-    requirements = ROOT / ("operator-requirements.txt" if args.role == "operator" else "requirements.txt")
+    requirements = ROOT / {"dashboard": "garage-dashboard/requirements.txt", "hub": "phones/hub/requirements.txt",
+                           "operator": "phones/fleet-operator/requirements.txt"}[args.role]
     subprocess.run([str(python), "-m", "pip", "install", "-r", str(requirements)], check=True)
     if args.browser:
         subprocess.run([str(python), "-m", "playwright", "install", "chromium"], check=True)

@@ -26,7 +26,7 @@ case "$dashboard_dir$python_bin" in
 esac
 cat > "$unit_file" <<EOF
 [Unit]
-Description=Garage mission control dashboard
+Description=Garage Observatory
 After=network.target
 
 [Service]

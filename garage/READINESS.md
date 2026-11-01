@@ -2,11 +2,13 @@
 
 This is the authoritative distinction between software tested locally and hardware-specific work. A working software path does not mean an unknown old device has been tested or can run a particular model.
 
+The Observatory is separate from the phone hub. Legacy experiment rows below describe standalone scripts/collectors, not additional Observatory screens. The terrarium is archived.
+
 ## Installable software paths
 
 | Feature | Implemented path | Required setup / limits |
 | --- | --- | --- |
-| Dashboard and terrarium | Browser UI, saved ecosystem, care controls, notebook, history | Python host plus browser; Pi performance unmeasured |
+| Garage Observatory | Weather, aircraft radar, ISS position/passes, hourly 3D solar system with 39 curated bodies and body search | Install dashboard dependencies; choose city in browser; Pi performance unmeasured |
 | GRACE health | Independent HTTP/latency check | Configure tower URL; deep database/model health is not established by HTTP reachability |
 | Digital radar / universe | TCP checks, paired agent heartbeats, host telemetry, optional observed-connection links | Configure services and/or fleet URL/key; it is not passive router-wide traffic capture |
 | Weather / air / earthquakes / geomagnetic | Cached real feeds and statistical/threshold explanations | Configure location and enable sources; failures are explicit, cached stale readings are excluded from current anomaly results |

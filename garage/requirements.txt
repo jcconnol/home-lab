@@ -1,4 +1,3 @@
-chess>=1.11,<2
-skyfield>=1.49,<2
+-r garage-dashboard/requirements.txt
+-r phones/hub/requirements.txt
 psutil>=6,<8
-Pillow>=11,<13

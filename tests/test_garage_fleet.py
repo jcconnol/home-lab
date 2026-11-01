@@ -214,19 +214,15 @@ def test_live_weather_and_air_have_historical_context(tmp_path):
     assert len(app.air()["readings"]) == 50
 
 
-def test_home_assistant_live_state(tmp_path, monkeypatch):
-    module = load("garage-dashboard")
+def test_home_assistant_adapter_remains_read_only(tmp_path, monkeypatch):
+    collectors = file_module(GARAGE / "garage-dashboard/collectors.py")
     monkeypatch.setenv("TEST_HA_KEY", "private-test-key")
-    app = module.Dashboard({"live": {"enabled": True, "weather": False, "air": False, "earthquakes": False, "geomagnetic": False,
-                                     "home_assistant": {"enabled": True, "url": "http://home-assistant.test", "token_env": "TEST_HA_KEY", "rooms": {"Living room": ["light.test"]}}}}, tmp_path)
     def fetch(url, headers):
+        assert url == "http://home-assistant.test/api/states"
         assert headers["Authorization"] == "Bearer private-test-key"
         return [{"entity_id": "light.test", "state": "on", "last_updated": "2026-01-01T00:00:00Z", "attributes": {"brightness": 128}}]
-    app.collectors.fetch = fetch
-    app.collect()
-    room = app.snapshot()["modules"]["twin"]["data"]["rooms"][0]
-    assert room["name"] == "Living room"
-    assert room["devices"][0]["freshness"] == "fresh"
+    app = collectors.Collectors({"home_assistant": {"url": "http://home-assistant.test", "token_env": "TEST_HA_KEY"}}, tmp_path, fetch)
+    assert app.home_assistant()["states"][0]["attributes"]["brightness"] == 128
 
 
 def test_operator_plan_rejects_executable_actions(fleet):

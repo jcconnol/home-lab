@@ -17,6 +17,8 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--channel", default="msedge")
     parser.add_argument("--output", type=Path, default=GARAGE / "runtime/validation")
+    parser.add_argument("--live-fixture", type=Path, help="Use recorded public-source data for screenshots; otherwise synthetic fixtures")
+    parser.add_argument("--board-only", action="store_true", help="Validate only the observatory UI")
     args = parser.parse_args()
     args.output.mkdir(parents=True, exist_ok=True)
     hub, dashboard = load("phones/hub"), load("garage-dashboard")
@@ -26,8 +28,12 @@ def main():
         first, second = store.pair("Camera terminal"), store.pair("Workbench terminal")
         with serving(hub.handler_factory(store)) as hub_url:
             store.config["allowed_origins"] = [hub_url]
-            control = dashboard.Dashboard({"services": [{"id": "hub", "name": "Local phone hub / test", "host": "127.0.0.1", "port": int(hub_url.rsplit(":", 1)[1])}]}, root / "dashboard")
-            control.collect()
+            control = dashboard.Dashboard({}, root / "dashboard")
+            from observatory_fixtures import snapshot
+            fixture = json.loads(args.live_fixture.read_text(encoding="utf-8")) if args.live_fixture else snapshot()
+            location = fixture["settings"]["location"]
+            control.search_location = lambda query: [location]
+            control.solar.search = lambda query: [{"id": "1000036", "name": "Test comet", "tracked": False}]
             with serving(dashboard.handler_factory(control)) as dashboard_url, sync_playwright() as playwright:
                 browser = playwright.chromium.launch(channel=args.channel, headless=True)
                 errors = []
@@ -37,22 +43,65 @@ def main():
                     return result
                 desktop = page(browser.new_context(viewport={"width": 1440, "height": 1050}))
                 desktop.goto(dashboard_url)
-                desktop.get_by_role("button", name="Feed +10").wait_for()
-                desktop.get_by_role("button", name="Feed +10").click()
-                expect(desktop.locator(".terrarium-stats")).to_contain_text("50/100")
-                desktop.get_by_role("button", name="Pause", exact=True).click()
-                desktop.get_by_role("button", name="Resume", exact=True).wait_for()
-                desktop.get_by_role("button", name="Advance one tick").click()
-                expect(desktop.locator(".terrarium-stats")).to_contain_text("TICK 1")
-                modes = ["overview", "terrarium", "network", "health", "observatory", "twin", "space", "universe", "detective", "timeline", "missions"]
-                for width in (1440, 390):
-                    desktop.set_viewport_size({"width": width, "height": 1050})
-                    for mode in modes:
-                        desktop.locator(f'nav a[data-mode="{mode}"]').click()
-                        expect(desktop.locator("#content")).not_to_be_empty()
-                        assert desktop.evaluate("document.documentElement.scrollWidth<=window.innerWidth"), (width, mode)
-                    desktop.locator('nav a[data-mode="overview"]').click()
+                desktop.get_by_label("City or ZIP code").fill(location["name"])
+                desktop.get_by_role("button", name="Find location", exact=True).click()
+                desktop.locator("#location-results button").first.click()
+                expect(desktop.locator("#setup")).to_be_hidden()
+                assert control.snapshot()["configured"] is True
+                with control.lock:
+                    control.feeds = fixture["feeds"]
+                desktop.reload()
+                expect(desktop.locator("#weather")).to_contain_text("humidity")
+                expect(desktop.locator("#aircraft-count")).not_to_have_text("—")
+                expect(desktop.locator("#iss")).to_contain_text("km altitude")
+                assert "terrarium" not in desktop.locator("body").inner_text().lower()
+                assert "GRACE" not in desktop.locator("body").inner_text()
+                desktop.get_by_role("button", name="°F / mph", exact=True).click()
+                expect(desktop.locator("#units-button")).to_have_text("°C / km/h")
+                expect(desktop.locator("#weather")).to_contain_text("°C")
+                desktop.get_by_role("button", name="°C / km/h", exact=True).click()
+                desktop.locator('nav a[href="#solar"]').click()
+                desktop.locator('#solar-catalog button').filter(has_text="Moon").first.wait_for()
+                desktop.get_by_role("button", name="Moon", exact=True).click()
+                expect(desktop.locator("#solar-selected")).to_contain_text("From Earth")
+                expect(desktop.locator("#solar-focus")).to_have_value("earth")
+                desktop.locator("#solar-focus").select_option("sun")
+                canvas = desktop.locator("#solar-canvas")
+                canvas.focus()
+                desktop.wait_for_timeout(150)
+                before = canvas.evaluate("canvas => canvas.toDataURL()")
+                desktop.keyboard.press("ArrowLeft")
+                desktop.wait_for_timeout(150)
+                assert before != canvas.evaluate("canvas => canvas.toDataURL()")
+                desktop.screenshot(path=str(args.output / "solar-1440.png"), full_page=True)
+                for width, height in ((1440, 1050), (1280, 720), (390, 844)):
+                    desktop.set_viewport_size({"width": width, "height": height})
+                    for view in ("board", "solar"):
+                        desktop.locator(f'nav a[href="#{view}"]').click()
+                        expect(desktop.locator("#"+view)).to_be_visible()
+                        assert desktop.evaluate("document.documentElement.scrollWidth<=window.innerWidth"), (width, view)
+                    desktop.locator('nav a[href="#board"]').click()
+                    expect(desktop.locator("#board")).to_be_visible()
+                    if width == 1280:
+                        assert desktop.evaluate("document.documentElement.scrollHeight<=window.innerHeight+2"), desktop.evaluate("() => [...document.querySelectorAll('header,.toolbar,.board-grid,.panel,footer')].map(e=>({name:e.className,height:e.getBoundingClientRect().height,top:e.getBoundingClientRect().top}))")
                     desktop.screenshot(path=str(args.output / f"dashboard-{width}.png"), full_page=True)
+                desktop.locator('nav a[href="#solar"]').click()
+                desktop.get_by_label("Add another JPL body").fill("Test comet")
+                desktop.get_by_role("button", name="Search JPL", exact=True).click()
+                desktop.locator("#body-results button").first.click()
+                expect(desktop.locator("#body-results")).to_be_empty()
+                assert control.settings["extra_bodies"][0]["id"] == "1000036"
+                with control.lock:
+                    control.feeds["aircraft"] = dict(control.feeds["aircraft"], status="error", error="Test source outage")
+                desktop.locator('nav a[href="#board"]').click()
+                desktop.reload()
+                expect(desktop.locator("#aircraft-status")).to_contain_text("last good data")
+                if args.board_only:
+                    browser.close()
+                    assert not errors, errors
+                    print(json.dumps({"views": ["local board", "3D solar system"], "widths": [1440, 1280, 390], "720p_no_scroll": True,
+                                      "checks": ["location setup", "units", "forecast", "aircraft", "ISS", "3D rotation", "Moon focus", "add body", "source outage"], "page_errors": errors}))
+                    return
                 contexts = [browser.new_context(viewport={"width": 390, "height": 844}) for _ in range(2)]
                 a, b = [page(context) for context in contexts]
                 for client, identity in ((a, first), (b, second)):
@@ -148,8 +197,8 @@ def main():
             store.finish_job(second["id"], {"id": identifier, "result": result})
             assert store.jobs()[0]["result"]["artifact"]
             assert not errors, errors
-    print(json.dumps({"dashboard_views": 11, "viewports": [1440, 390], "two_browser_clients": True,
-                      "checks": ["terrarium care", "photo transfer", "message acknowledgment", "offline queue replay", "battle", "chess moves", "split inference", "bounded relay transfer", "fixture faults and stop", "operator browser job and screenshot"], "page_errors": errors}))
+    print(json.dumps({"dashboard_views": ["local board", "3D solar system"], "viewports": [1440, 390], "two_browser_clients": True,
+                      "checks": ["location setup", "weather and forecast", "aircraft radar", "ISS", "3D rotate and planet focus", "add JPL body", "source outage", "photo transfer", "message acknowledgment", "offline queue replay", "battle", "chess moves", "split inference", "bounded relay transfer", "fixture faults and stop", "operator browser job and screenshot"], "page_errors": errors}))
 
 
 if __name__ == "__main__":

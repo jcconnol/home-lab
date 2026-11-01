@@ -1,25 +1,25 @@
-"""Standalone, dependency-free garage dashboard server."""
+"""Garage Observatory: a standalone weather, aircraft, ISS, and solar-system board."""
 import argparse
 import copy
+import hashlib
 import hmac
 import importlib.util
 import json
+import math
 import os
-import platform
-import random
+import re
 import secrets
-import shutil
-import sqlite3
 import threading
 import time
+import urllib.parse
 from datetime import datetime, timezone
 from http.cookies import SimpleCookie
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from urllib.parse import urlsplit
 
 
 ROOT = Path(__file__).resolve().parent
+SOURCE_INTERVALS = {"weather": 900, "air": 900, "aircraft": 120, "iss": 30, "satellites": 3600, "solar_system": 3600}
 
 
 def module(folder):
@@ -35,221 +35,163 @@ def now():
 
 
 class Dashboard:
-    def __init__(self, config, storage, config_dir=None, interval=30, tick_seconds=20):
-        self.config = config
+    def __init__(self, config, storage, config_dir=None, interval=30):
+        self.config = copy.deepcopy(config)
         self.storage = Path(storage)
         self.storage.mkdir(parents=True, exist_ok=True)
-        self.config_dir = Path(config_dir or ROOT)
-        self.interval = interval
-        self.tick_seconds = tick_seconds
-        self.started = time.monotonic()
+        self.settings_file = self.storage / "display-settings.json"
         self.lock = threading.RLock()
         self.stop = threading.Event()
-        self.rng = random.Random()
-        self.ecology = module("terrarium")
-        self.collectors = module("collectors.py").Collectors(config.get("live", {}), self.storage / "feeds")
-        self.state_file = self.storage / "terrarium.json"
-        self.terrarium = json.loads(self.state_file.read_text()) if self.state_file.exists() else {
-            "tick": 0, "plants": 40, "next_id": 3, "paused": False,
-            "creatures": [{"id": i, "parent": None, "age": 0, "energy": 10} for i in (1, 2)], "events": []}
-        self.terrarium.setdefault("paused", False)
-        self.data = {"health": {"status": "checking"}, "network": {"nodes": [], "edges": []},
-                     "modules": {}, "checked_at": None, "events": []}
-        self.events_file = self.storage / "events.json"
-        self.events = json.loads(self.events_file.read_text()) if self.events_file.exists() else []
-        self.missions_db = self.storage / "missions.sqlite"
-        with sqlite3.connect(self.missions_db) as db:
-            db.execute("CREATE TABLE IF NOT EXISTS missions (id INTEGER PRIMARY KEY, question TEXT, prediction TEXT, created_at TEXT)")
-            db.execute("CREATE TABLE IF NOT EXISTS observations (id INTEGER PRIMARY KEY, mission_id INTEGER, outcome TEXT, observed_at TEXT)")
+        self.generation = 0
+        self.interval = interval
+        self.collector_module = module("collectors.py")
+        live = config.get("live", {})
+        self.settings = {"location": live.get("location"), "units": config.get("units", "imperial"),
+                         "aircraft_radius_nm": live.get("aircraft_radius_nm", 40), "solar_system": bool(live.get("enabled")),
+                         "extended_bodies": True, "extra_bodies": []}
+        if self.settings_file.exists():
+            self.settings.update(json.loads(self.settings_file.read_text(encoding="utf-8")))
+        self.feeds = {}
+        self._configure_collectors()
+        self.solar = module("solar_system.py").SolarSystem(self.storage / "solar", self.collector_module.fetch_json,
+                                                          lambda: self.collectors.astronomy(), self.stop)
 
-    def save(self, path, value):
-        temporary = path.with_suffix(".tmp")
-        temporary.write_text(json.dumps(value), encoding="utf-8")
-        temporary.replace(path)
+    def _configure_collectors(self):
+        previous = getattr(self, "collectors", None)
+        live = copy.deepcopy(self.config.get("live", {}))
+        live.update(location=self.settings.get("location"), aircraft_radius_nm=self.settings["aircraft_radius_nm"], observatory_schema=2)
+        fingerprint = hashlib.sha256(json.dumps(live, sort_keys=True).encode()).hexdigest()[:12]
+        self.collectors = self.collector_module.Collectors(live, self.storage / "feeds" / fingerprint)
+        if previous:
+            self.collectors.astro_lock = previous.astro_lock
+            self.collectors._astronomy = previous._astronomy
+        # The solar/ISS ephemeris download is shared across location changes.
+        self.collectors.storage = self.storage / "ephemeris"
+        self.collectors.storage.mkdir(exist_ok=True)
 
-    def care(self, action):
+    def has_location(self):
+        location = self.settings.get("location") or {}
+        return all(isinstance(location.get(key), (int, float)) and math.isfinite(location[key]) for key in ("latitude", "longitude"))
+
+    def search_location(self, query):
+        if not isinstance(query, str) or not 2 <= len(query.strip()) <= 100:
+            raise ValueError("Enter a city or ZIP code (2..100 characters)")
+        result = self.collector_module.fetch_json("https://geocoding-api.open-meteo.com/v1/search?" + urllib.parse.urlencode({"name": query.strip(), "count": 8, "language": "en"}))
+        return [{"name": row["name"], "latitude": row["latitude"], "longitude": row["longitude"], "timezone": row.get("timezone", "UTC"),
+                 "region": ", ".join(filter(None, [row.get("admin1"), row.get("country")]))} for row in result.get("results", [])]
+
+    def save_settings(self, data):
         with self.lock:
-            if action == "feed":
-                self.terrarium["plants"] = min(100, self.terrarium["plants"] + 10)
-            elif action == "pause":
-                self.terrarium["paused"] = not self.terrarium["paused"]
-            elif action == "step":
-                self.ecology.advance(self.terrarium, self.rng)
-            elif action == "introduce":
-                self.terrarium["creatures"].append({"id": self.terrarium["next_id"], "parent": None, "age": 0, "energy": 10})
-                self.terrarium["next_id"] += 1
-            else:
-                raise ValueError("Unknown care action")
-            self.save(self.state_file, self.terrarium)
-            return copy.deepcopy(self.terrarium)
+            previous = self.settings
+            settings = copy.deepcopy(previous)
+            if "location" in data:
+                location = data["location"]
+                if not isinstance(location, dict):
+                    raise ValueError("Choose a location")
+                lat, lon = float(location["latitude"]), float(location["longitude"])
+                if not math.isfinite(lat + lon) or not -90 <= lat <= 90 or not -180 <= lon <= 180:
+                    raise ValueError("Invalid coordinates")
+                settings["location"] = {"name": str(location["name"])[:100], "latitude": lat, "longitude": lon,
+                                        "timezone": str(location.get("timezone", "UTC"))[:80], "region": str(location.get("region", ""))[:150]}
+                settings["solar_system"] = True
+            if "units" in data:
+                if data["units"] not in ("imperial", "metric"):
+                    raise ValueError("Choose imperial or metric units")
+                settings["units"] = data["units"]
+            if "aircraft_radius_nm" in data:
+                radius = float(data["aircraft_radius_nm"])
+                if not math.isfinite(radius) or not 5 <= radius <= 100:
+                    raise ValueError("Aircraft radius must be 5..100 nautical miles")
+                settings["aircraft_radius_nm"] = radius
+            for key in ("solar_system", "extended_bodies"):
+                if key in data:
+                    if not isinstance(data[key], bool):
+                        raise ValueError("Invalid display toggle")
+                    settings[key] = data[key]
+            if "add_body" in data:
+                body = data["add_body"]
+                identifier = str(body["id"])
+                if not re.fullmatch(r"\d{1,9}", identifier) or not isinstance(body.get("name"), str) or not 1 <= len(body["name"]) <= 100:
+                    raise ValueError("Select a valid JPL search result")
+                if len(settings["extra_bodies"]) >= 50:
+                    raise ValueError("At most 50 additional bodies can be tracked")
+                if not any(row["id"] == identifier for row in settings["extra_bodies"]):
+                    settings["extra_bodies"].append({"id": identifier, "name": body["name"]})
+                settings["solar_system"] = True
+            temporary = self.settings_file.with_suffix(".tmp")
+            temporary.write_text(json.dumps(settings, indent=2), encoding="utf-8")
+            temporary.replace(self.settings_file)
+            self.settings = settings
+            self.generation += 1
+            if settings["location"] != previous["location"]:
+                self._configure_collectors()
+                self.feeds = {key: value for key, value in self.feeds.items() if key == "solar_system"}
+            elif settings["aircraft_radius_nm"] != previous["aircraft_radius_nm"]:
+                self._configure_collectors()
+                self.feeds.pop("aircraft", None)
+            if any(settings[key] != previous[key] for key in ("extra_bodies", "extended_bodies", "solar_system")):
+                existing = self.feeds.get("solar_system")
+                if existing:
+                    self.feeds["solar_system"] = dict(existing, attempt=0, refreshing=True)
+        return settings
 
-    def read_input(self, name):
-        path = self.config.get("inputs", {}).get(name)
-        if not path:
-            return None
-        return json.loads((self.config_dir / path).read_text(encoding="utf-8"))
+    def enabled(self, name):
+        return bool(self.settings["solar_system"]) if name == "solar_system" else self.has_location()
+
+    def collect_source(self, name):
+        with self.lock:
+            if not self.enabled(name):
+                return
+            generation, collector, settings = self.generation, self.collectors, copy.deepcopy(self.settings)
+            previous = self.feeds.get(name)
+            if previous and time.time() - previous.get("attempt", 0) < SOURCE_INTERVALS[name]:
+                return
+            self.feeds[name] = dict(previous, refreshing=True) if previous else {"status": "loading", "started_at": now()}
+        if name == "solar_system":
+            key = name + "-" + hashlib.sha256(json.dumps([settings["extra_bodies"], settings["extended_bodies"]], sort_keys=True).encode()).hexdigest()[:12]
+            result = collector.cached(key, lambda: self.solar.collect(settings["extra_bodies"], settings["extended_bodies"]), SOURCE_INTERVALS[name])
+        else:
+            result = collector.cached(name, getattr(collector, name), SOURCE_INTERVALS[name])
+        with self.lock:
+            if generation == self.generation:
+                self.feeds[name] = result
 
     def collect(self):
-        grace_url = self.config.get("grace_url", "").strip()
-        health = module("grace-health").check({"name": "GRACE", "url": grace_url}) if grace_url else {
-            "name": "GRACE", "status": "not_configured"}
-        network = module("network-radar").scan({"services": self.config.get("services", []),
-                                                "relationships": self.config.get("relationships", [])})
-        with self.lock:
-            previous_data = copy.deepcopy(self.data)
-            self.data.update(health=health, network=network, checked_at=now())
-        modules = {}
-        tasks = {
-            "observatory": ("anomaly_readings", lambda data: module("anomaly-observatory").detect(data)),
-            "space": ("satellite_passes", lambda data: module("space-command").upcoming(data, datetime.now(timezone.utc))),
-            "twin": ("apartment_layout", lambda data: module("apartment-twin").build_twin(data, self.read_input("apartment_states") or [], 3600)),
-        }
-        for name, (input_name, compute) in tasks.items():
-            try:
-                data = self.read_input(input_name)
-                modules[name] = {"status": "not_configured"} if data is None else {"status": "loaded", "data": compute(data)}
-            except (ValueError, OSError, KeyError, TypeError) as error:
-                modules[name] = {"status": "error", "error": str(error)}
-        feeds = self.collectors.collect()
-        fleet = feeds.get("fleet", {})
-        if fleet.get("status") == "live":
-            for device in fleet["data"]["devices"]:
-                network["nodes"].append({"id": "fleet:" + device["id"], "name": device["name"],
-                                         "host": device["metadata"].get("host", device["name"]), "port": "agent",
-                                         "status": "reachable" if device["online"] else "unreachable", "check_kind": "heartbeat",
-                                         "checked_at": now(), "metadata": device["metadata"], "error": None})
-            addresses = {address: node["id"] for node in network["nodes"] for address in node.get("metadata", {}).get("addresses", [])}
-            for node in network["nodes"]:
-                for connection in node.get("metadata", {}).get("connections", []):
-                    remote = connection.get("remote", [])
-                    if remote and remote[0] in addresses and addresses[remote[0]] != node["id"]:
-                        edge = {"source": node["id"], "target": addresses[remote[0]], "kind": "observed agent connection"}
-                        if edge not in network["edges"]:
-                            network["edges"].append(edge)
-        readings = [row for feed in feeds.values() if feed.get("status") == "live" for row in feed.get("data", {}).get("readings", [])]
-        if feeds:
-            detected = module("anomaly-observatory").detect(readings, max_age=14400) if readings else []
-            for row in detected:
-                if row["metric"] == "Kp" and row["value"] >= 5 and row["status"] != "unknown":
-                    row.update(status="anomaly", explanation="NOAA planetary Kp is at least 5, the geomagnetic storm threshold. Local effects and aurora visibility are not guaranteed.")
-            existing = modules.get("observatory", {}).get("data", [])
-            modules["observatory"] = {"status": "loaded", "data": existing + detected, "sources": feeds}
-        satellite = feeds.get("satellites", {})
-        if satellite.get("status") == "live":
-            modules["space"] = {"status": "loaded", "data": satellite["data"]["passes"], "note": satellite["data"]["note"]}
-        assistant = feeds.get("home_assistant", {})
-        if assistant.get("status") == "live":
-            states = assistant["data"]["states"]
-            layout = self.read_input("apartment_layout")
-            if layout is None:
-                assignments = self.config.get("live", {}).get("home_assistant", {}).get("rooms", {})
-                assigned = {entity for entities in assignments.values() for entity in entities}
-                rooms = dict(assignments)
-                remaining = [row["entity_id"] for row in states if row["entity_id"] not in assigned]
-                if remaining:
-                    rooms["Unassigned devices"] = remaining
-                layout = {"rooms": [{"name": name, "width": 6, "height": max(4, (len(entities) + 2) // 3),
-                                     "devices": [{"entity_id": entity, "x": (index % 3) * 2 + 1, "y": index // 3 + 1} for index, entity in enumerate(entities)]}
-                                    for name, entities in rooms.items()]}
-            twin = module("apartment-twin").build_twin(layout, states, 3600)
-            for room in twin["rooms"]:
-                for device in room["devices"]:
-                    if device["freshness"] != "missing":
-                        device["freshness"] = "unavailable" if device["state"] in ("unavailable", "unknown") else "fresh"
-            modules["twin"] = {"status": "loaded", "data": twin, "note": "Read-only live Home Assistant polling. Entity last_updated is a state-change timestamp, not a heartbeat."}
-        try:
-            imported = self.read_input("events") or []
-            if not isinstance(imported, list):
-                raise ValueError("events must be a JSON array")
-            for event in imported:
-                instant = datetime.fromisoformat(event["timestamp"].replace("Z", "+00:00"))
-                if instant.tzinfo is None:
-                    raise ValueError("Event timestamps must include timezone")
-        except (ValueError, OSError, KeyError, TypeError) as error:
-            imported = []
-            modules["timeline"] = {"status": "error", "error": str(error)}
-        for feed in feeds.values():
-            if feed.get("status") == "live":
-                imported += feed.get("data", {}).get("events", [])
-        with self.lock:
-            previous = {item["id"]: item["status"] for item in previous_data["network"]["nodes"]}
-            for item in network["nodes"]:
-                if item["id"] in previous and previous[item["id"]] != item["status"]:
-                    self.events.append({"timestamp": now(), "source": item["id"], "event": item["status"]})
-            if previous_data["checked_at"] and previous_data["health"]["status"] != health["status"]:
-                self.events.append({"timestamp": now(), "source": "grace", "event": health["status"]})
-            self.events = self.events[-500:]
-            self.save(self.events_file, self.events)
-            unique = {(event.get("source"), event["timestamp"], event.get("event")): event for event in self.events + imported}
-            events = sorted(unique.values(), key=lambda event: datetime.fromisoformat(event["timestamp"].replace("Z", "+00:00")))
-            modules["detective"] = {"status": "loaded", "data": module("signal-detective").correlate(events[-100:], 60)[-50:]}
-            self.data = {"health": health, "network": network, "modules": modules,
-                         "checked_at": now(), "events": events[-500:]}
-
-    def mission(self, data):
-        with sqlite3.connect(self.missions_db) as db:
-            if data.get("action") == "create":
-                question, prediction = data.get("question"), data.get("prediction")
-                if not all(isinstance(value, str) and 0 < len(value.strip()) <= 2000 for value in (question, prediction)):
-                    raise ValueError("Question and prediction are required (up to 2000 characters)")
-                db.execute("INSERT INTO missions(question,prediction,created_at) VALUES(?,?,?)", (question, prediction, now()))
-            elif data.get("action") == "observe":
-                outcome = data.get("outcome")
-                if not isinstance(outcome, str) or not 0 < len(outcome.strip()) <= 2000:
-                    raise ValueError("Outcome required (up to 2000 characters)")
-                if not db.execute("SELECT id FROM missions WHERE id=?", (data.get("id"),)).fetchone():
-                    raise ValueError("Mission not found")
-                db.execute("INSERT INTO observations(mission_id,outcome,observed_at) VALUES(?,?,?)", (data["id"], outcome, now()))
-            else:
-                raise ValueError("Unknown mission action")
+        for source in SOURCE_INTERVALS:
+            self.collect_source(source)
 
     def snapshot(self):
         with self.lock:
-            result = copy.deepcopy(self.data)
-            result["terrarium"] = copy.deepcopy(self.terrarium)
-        with sqlite3.connect(self.missions_db) as db:
-            db.row_factory = sqlite3.Row
-            result["missions"] = [dict(row) for row in db.execute("SELECT * FROM missions ORDER BY id DESC")]
-            for mission in result["missions"]:
-                mission["observations"] = [dict(row) for row in db.execute("SELECT * FROM observations WHERE mission_id=? ORDER BY id", (mission["id"],))]
-        usage = shutil.disk_usage(self.storage)
-        result["host"] = {"name": platform.node(), "uptime_seconds": int(time.monotonic() - self.started),
-                          "disk_free_gb": round(usage.free / 1024**3, 1), "system": platform.system()}
-        result["server_time"] = now()
-        result["refresh_seconds"] = self.interval
+            result = {"settings": copy.deepcopy(self.settings), "configured": self.has_location(), "feeds": copy.deepcopy(self.feeds),
+                      "server_time": now(), "refresh_seconds": self.interval, "solar_progress": dict(self.solar.progress)}
+            if result["feeds"].get("solar_system", {}).get("status") == "loading" and self.solar.partial:
+                result["feeds"]["solar_system"]["data"] = copy.deepcopy(self.solar.partial)
         return result
 
     def run(self):
-        def checks():
+        def worker(source):
             while not self.stop.is_set():
                 try:
-                    self.collect()
+                    self.collect_source(source)
                 except Exception as error:
                     with self.lock:
-                        self.data["collection_error"] = str(error)
-                self.stop.wait(self.interval)
-        collector = threading.Thread(target=checks, daemon=True)
-        collector.start()
-        with self.lock:
-            self.save(self.state_file, self.terrarium)
-        try:
-            while not self.stop.wait(self.tick_seconds):
-                with self.lock:
-                    if not self.terrarium["paused"]:
-                        self.ecology.advance(self.terrarium, self.rng)
-                        self.save(self.state_file, self.terrarium)
-        finally:
-            collector.join(timeout=1)
+                        self.feeds[source] = {"status": "error", "error": str(error), "attempt": time.time()}
+                self.stop.wait(2)
+        workers = [threading.Thread(target=worker, args=(source,), daemon=True) for source in SOURCE_INTERVALS]
+        for thread in workers:
+            thread.start()
+        self.stop.wait()
+        for thread in workers:
+            thread.join(timeout=0.1)
 
 
 def handler_factory(dashboard, password=""):
     session = secrets.token_urlsafe(32)
-
     class Handler(BaseHTTPRequestHandler):
-        def send(self, code, payload, content_type="application/json", cookie=None):
-            body = json.dumps(payload).encode() if content_type == "application/json" else payload
+        def send(self, code, value, mime="application/json", cookie=None):
+            body = json.dumps(value, allow_nan=False).encode() if mime == "application/json" else value
             self.send_response(code)
-            self.send_header("Content-Type", content_type)
+            self.send_header("Content-Type", mime)
             self.send_header("Content-Length", str(len(body)))
             self.send_header("Cache-Control", "no-store")
             self.send_header("X-Content-Type-Options", "nosniff")
@@ -262,8 +204,8 @@ def handler_factory(dashboard, password=""):
         def authenticated(self):
             if not password:
                 return True
-            cookies = SimpleCookie()
             try:
+                cookies = SimpleCookie()
                 cookies.load(self.headers.get("Cookie", ""))
                 value = cookies.get("garage_session")
                 return bool(value and hmac.compare_digest(value.value, session))
@@ -271,29 +213,39 @@ def handler_factory(dashboard, password=""):
                 return False
 
         def do_GET(self):
-            path = urlsplit(self.path).path
-            if path == "/api/status":
+            parsed = urllib.parse.urlsplit(self.path)
+            if parsed.path.startswith("/api/"):
                 if not self.authenticated():
                     return self.send(401, {"error": "Sign in required"})
-                return self.send(200, dashboard.snapshot())
-            files = {"/": ("index.html", "text/html; charset=utf-8"),
-                     "/app.js": ("app.js", "text/javascript; charset=utf-8"),
+                try:
+                    if parsed.path == "/api/status":
+                        return self.send(200, dashboard.snapshot())
+                    query = urllib.parse.parse_qs(parsed.query).get("q", [""])[0]
+                    if parsed.path == "/api/location/search":
+                        return self.send(200, {"results": dashboard.search_location(query)})
+                    if parsed.path == "/api/bodies/search":
+                        return self.send(200, {"results": dashboard.solar.search(query)})
+                except (ValueError, OSError) as error:
+                    return self.send(400, {"error": str(error)})
+            files = {"/": ("index.html", "text/html; charset=utf-8"), "/app.js": ("app.js", "text/javascript; charset=utf-8"),
+                     "/solar.js": ("solar.js", "text/javascript; charset=utf-8"), "/board.css": ("board.css", "text/css; charset=utf-8"),
                      "/style.css": ("style.css", "text/css; charset=utf-8")}
-            if path not in files:
+            files["/land.json"] = ("land.json", "application/json; charset=utf-8")
+            if parsed.path not in files:
                 return self.send(404, {"error": "Not found"})
-            name, content_type = files[path]
-            self.send(200, (ROOT / "web" / name).read_bytes(), content_type)
+            name, mime = files[parsed.path]
+            self.send(200, (ROOT / "web" / name).read_bytes(), mime)
 
         def do_POST(self):
             origin = self.headers.get("Origin")
-            if origin and urlsplit(origin).netloc != self.headers.get("Host"):
+            if origin and urllib.parse.urlsplit(origin).netloc != self.headers.get("Host"):
                 return self.send(403, {"error": "Cross-origin writes are not allowed"})
             if self.headers.get("Content-Type", "").split(";")[0].strip() != "application/json":
                 return self.send(415, {"error": "JSON required"})
             try:
                 size = int(self.headers.get("Content-Length", "0"))
-                if not 0 < size <= 8192:
-                    raise ValueError("Body must be 1..8192 bytes")
+                if not 0 < size <= 16384:
+                    raise ValueError("Invalid request size")
                 data = json.loads(self.rfile.read(size))
                 if not isinstance(data, dict):
                     raise ValueError("Expected a JSON object")
@@ -304,15 +256,11 @@ def handler_factory(dashboard, password=""):
                     return self.send(200, {"ok": True}, cookie=f"garage_session={session}; HttpOnly; SameSite=Strict; Path=/")
                 if not self.authenticated():
                     return self.send(401, {"error": "Sign in required"})
-                if self.path == "/api/terrarium":
-                    return self.send(200, dashboard.care(data["action"]))
-                if self.path == "/api/missions":
-                    dashboard.mission(data)
-                    return self.send(200, {"ok": True})
-                self.send(404, {"error": "Not found"})
-            except (ValueError, KeyError, TypeError) as error:
+                if self.path == "/api/settings":
+                    return self.send(200, dashboard.save_settings(data))
+                return self.send(404, {"error": "Not found"})
+            except (ValueError, KeyError, TypeError, OSError) as error:
                 self.send(400, {"error": str(error)})
-
     return Handler
 
 
@@ -322,27 +270,20 @@ def main():
     parser.add_argument("--port", type=int, default=8780)
     parser.add_argument("--config", type=Path)
     parser.add_argument("--storage", type=Path, default=ROOT / "runtime")
-    parser.add_argument("--grace-url", help="Public GRACE landing page URL; HTTP availability only")
     parser.add_argument("--interval", type=int, default=30)
-    parser.add_argument("--tick-seconds", type=int, default=20)
     args = parser.parse_args()
-    if args.interval < 5 or args.tick_seconds < 1:
-        parser.error("interval must be >=5 and tick-seconds >=1")
+    if args.interval < 5:
+        parser.error("interval must be >=5")
     password = os.environ.get("GARAGE_DASHBOARD_KEY", "")
-    if args.host not in ("127.0.0.1", "::1", "localhost") and len(password) < 24:
-        parser.error("Non-loopback binding requires GARAGE_DASHBOARD_KEY of 24+ characters; use a private Tailscale address")
+    if args.host not in ("127.0.0.1", "localhost") and len(password) < 24:
+        parser.error("Non-loopback binding requires GARAGE_DASHBOARD_KEY of 24+ characters")
     config = json.loads(args.config.read_text(encoding="utf-8")) if args.config else {}
-    if args.grace_url:
-        config["grace_url"] = args.grace_url
-    if len(config.get("services", [])) > 32:
-        parser.error("At most 32 explicit service checks are supported")
-    dashboard = Dashboard(config, args.storage, args.config.resolve().parent if args.config else ROOT,
-                          args.interval, args.tick_seconds)
+    dashboard = Dashboard(config, args.storage, interval=args.interval)
     server = ThreadingHTTPServer((args.host, args.port), handler_factory(dashboard, password))
     server.daemon_threads = True
     worker = threading.Thread(target=dashboard.run, daemon=True)
     worker.start()
-    print(f"Garage dashboard: http://{args.host}:{args.port}", flush=True)
+    print(f"Garage Observatory: http://{args.host}:{args.port}", flush=True)
     try:
         server.serve_forever()
     except KeyboardInterrupt:
@@ -350,7 +291,7 @@ def main():
     finally:
         dashboard.stop.set()
         server.server_close()
-        worker.join(timeout=5)
+        worker.join(timeout=2)
 
 
 if __name__ == "__main__":

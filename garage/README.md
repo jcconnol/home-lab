@@ -1,17 +1,17 @@
 # Garage project starters
 
-The [browser dashboard](garage-dashboard/README.md) is ready for a first Pi deployment: run `python3 garage/garage-dashboard/run.py` from the repo root and open `http://127.0.0.1:8780` on that device. It includes a visual terrarium, experiment notebook, and configured service checks. Other data views need the inputs described in its run guide.
+The [Garage Observatory](garage-dashboard/README.md) is the Pi display for weather, aircraft, ISS and hourly 3D solar-system positions. Install with `python3 garage/install.py dashboard`, then use the installed interpreter to run the dashboard. Select your city in the browser. Phone workflows are separate.
 
 The [phone fleet hub](phones/hub/README.md) now supplies browser photo sharing, messages, battles, chess, split-network inference, bounded network tests, and reviewed operator jobs. Run it on a supported host and pair each phone browser separately. See [READINESS.md](READINESS.md) before assuming any hardware/model feature is complete, and [DESIGN.md](DESIGN.md) for the shared sci-fi visual style.
 
 Install optional live/hub dependencies with `python3 garage/install.py dashboard` or `python3 garage/install.py hub`. For the browser worker, use `python3 garage/install.py operator --browser`. Each command creates a workspace-local virtual environment and preserves existing runtime data.
 
-Each idea also has its own folder, independent `run.py`, and README. These individual scripts are backend/CLI prototypes. All use the Python standard library; no root-level GRACE dependencies are needed. Python 3.11+ is the target (also checked here with Python 3.10).
+Each idea also has its own folder, independent `run.py`, and README. These individual scripts are backend/CLI prototypes. The standalone prototypes use the Python standard library; no root-level GRACE dependencies are needed. Python 3.11+ is the target (also checked here with Python 3.10).
 
 Run commands from a project's folder, for example:
 
 ```sh
-cd garage/garage-dashboard/terrarium
+cd garage/experiments/terrarium
 python run.py --ticks 10 --food 10
 ```
 
@@ -21,7 +21,7 @@ Use `python3` instead of `python` where appropriate. Each script supports `--hel
 
 | Folder | Working first slice |
 | --- | --- |
-| `garage-dashboard/terrarium` | Saved ecosystem with energy, feeding, births, deaths, and lineage |
+| `experiments/terrarium` | Saved ecosystem with energy, feeding, births, deaths, and lineage |
 | `garage-dashboard/anomaly-observatory` | Per-source historical deviation detection and stale-data handling |
 | `garage-dashboard/network-radar` | Explicit TCP service inventory and configured relationship graph |
 | `garage-dashboard/space-command` | Countdown/scheduling for imported satellite passes |
@@ -32,7 +32,7 @@ Use `python3` instead of `python` where appropriate. Each script supports `--hel
 | `garage-dashboard/apartment-twin` | Read-only room/entity join with exported Home Assistant states |
 | `garage-dashboard/grace-health` | Independent HTTP availability and latency checks |
 
-The individual scripts emit JSON; the browser dashboard renders their data and supplies shared local controls. Sample files are fictional fixtures, not live telemetry. Optional live collectors now cover weather, air quality, earthquakes, geomagnetic activity, ISS passes, Home Assistant polling, and enrolled host telemetry. Each needs its documented configuration. Run collection/simulation on the tower or Mac if needed; multiple lightweight scripts can coexist on a device.
+The individual scripts above are independent experiments, not Observatory modes. The terrarium is archived. Their source/configuration requirements remain in their own READMEs.
 
 ## Phone projects
 

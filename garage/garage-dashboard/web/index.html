@@ -1,26 +1,17 @@
 <!doctype html>
-<html lang="en">
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="theme-color" content="#060c16">
-  <title>GRACE / Garage command</title>
-  <link rel="stylesheet" href="/style.css">
-  <script src="/app.js" defer></script>
-</head>
-<body>
-  <aside>
-    <a class="brand" href="#overview"><span class="brand-mark">G<span> / </span></span><span>G.R.A.C.E.<small>GARAGE DIVISION</small></span></a>
-    <p class="nav-label">SYSTEM DIRECTORY / 01—11</p>
-    <nav aria-label="Dashboard modes" id="navigation"></nav>
-    <div class="sidebar-bottom"><span class="indicator"></span> PRIVATE LAB NETWORK<p>Observe. Experiment. Repeat.</p><span class="sidebar-code">GR / FIELD TERMINAL</span></div>
-  </aside>
-  <main>
-    <header><div><span class="eyebrow">G.R.A.C.E. / EXPERIMENTAL SYSTEMS</span><h1 id="title">Mission control</h1><p id="subtitle">A little window into your very unusual lab.</p></div><div class="clock"><span class="clock-label">LOCAL TIME</span><strong id="clock">--:--</strong><span id="connection">Connecting…</span></div></header>
-    <div id="notice" class="notice" role="status" hidden></div>
-    <form id="login" class="panel login" hidden><h2>Connect to your lab</h2><p>Enter the dashboard access key configured on the host.</p><label>Access key<input id="password" type="password" required autocomplete="current-password"></label><button type="submit">Sign in</button></form>
-    <section id="content" aria-live="polite"><div class="panel">Connecting to the dashboard host…</div></section>
-    <footer><span>GARAGE LAB <span class="muted">/ independent of GRACE</span></span><span id="updated">Waiting for first check</span></footer>
-  </main>
-</body>
-</html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#09131d"><title>Garage Observatory</title><link rel="stylesheet" href="/board.css"><script src="/solar.js" defer></script><script src="/app.js" defer></script></head>
+<body><main>
+<header class="masthead"><div class="identity"><span class="mark" aria-hidden="true">◎</span><div><span class="eyebrow">THE WORLD OUTSIDE YOUR GARAGE</span><h1>Garage Observatory</h1><button id="location-button" class="location-button">Set your location</button></div></div><div class="clock-block"><strong id="clock">--:--</strong><span id="date">Connecting to observatory…</span></div></header>
+<div class="toolbar"><nav aria-label="Observatory views"><a href="#board" class="active">Local sky & weather</a><a href="#solar">Solar system / 3D</a></nav><div class="toolbar-actions"><button id="units-button" class="quiet">°F / mph</button><button id="fullscreen" class="quiet">Fullscreen</button><span id="connection" class="connection">CONNECTING</span></div></div>
+<div id="notice" class="notice" role="status" hidden></div>
+<form id="login" class="setup panel" hidden><h2>Sign in to your observatory</h2><label>Access key<input id="password" type="password" autocomplete="current-password" required></label><button>Sign in</button></form>
+<section id="setup" class="setup panel" hidden><span class="eyebrow">MAKE IT LOCAL</span><h2>What’s happening around your garage?</h2><p>Choose your city for weather, nearby aircraft, and ISS passes. A city is enough—no street address needed.</p><form id="location-form"><label>City or ZIP code<input id="location-query" placeholder="City, state or country" minlength="2" maxlength="100" required></label><button>Find location</button></form><div id="location-results" class="location-results" aria-live="polite"></div><button class="quiet" id="close-setup">Close setup</button></section>
+<section id="board" class="board-grid">
+<article class="panel weather-panel"><div class="panel-heading"><div><span class="eyebrow">RIGHT NOW</span><h2>Outside conditions</h2></div><span id="weather-status" class="source-state">Waiting for location</span></div><div id="weather" class="weather-content"><p class="empty">Set your city to see current conditions and the forecast.</p></div><div id="hourly" class="hourly"></div><div id="weather-source" class="source-note"></div></article>
+<article class="panel aircraft-panel"><div class="panel-heading"><div><span class="eyebrow">LOOK UP</span><h2>Aircraft nearby <span id="aircraft-count" class="count">—</span></h2></div><span id="aircraft-status" class="source-state">Waiting for location</span></div><div id="aircraft" class="aircraft-content"><p class="empty">Nearby aircraft will appear here, with distance, altitude, and direction.</p></div><div class="panel-foot"><label>Search radius<select id="aircraft-radius"><option value="20">20 nautical miles</option><option value="40" selected>40 nautical miles</option><option value="80">80 nautical miles</option></select></label><span class="source-note">adsb.lol / ODbL · receiver coverage varies</span></div></article>
+<article class="panel iss-panel"><div class="panel-heading"><div><span class="eyebrow">IN ORBIT</span><h2>International Space Station</h2></div><span id="iss-status" class="source-state">Waiting for location</span></div><div id="iss"><p class="empty">Current position and the next potentially visible pass from your city.</p></div><p class="source-note">CelesTrak + Skyfield · position calculated from orbital elements · clouds can obscure a visible pass</p></article>
+<article class="panel outlook-panel"><div class="panel-heading"><div><span class="eyebrow">PLAN AHEAD</span><h2>The next few days</h2></div><span id="air-status" class="source-state"></span></div><div id="outlook"><p class="empty">Rain chances, highs and lows, sunrise, and sunset.</p></div><div id="air-quality" class="air-quality"></div></article>
+</section>
+<section id="solar" hidden><div class="panel solar-panel"><div class="panel-heading"><div><span class="eyebrow">OUR SOLAR NEIGHBORHOOD</span><h2>The solar system, now</h2></div><span id="solar-status" class="source-state">Ephemeris not loaded</span></div><div class="solar-toolbar"><label>Focus<select id="solar-focus"><option value="sun">Whole solar system</option></select></label><label>Distance scale<select id="solar-scale"><option value="compressed">Compressed distances</option><option value="linear">Linear distances</option></select></label><label class="check"><input type="checkbox" id="solar-moons" checked>Moons</label><label class="check"><input type="checkbox" id="solar-small" checked>Small bodies</label><button id="solar-reset" class="quiet">Reset view</button><button id="solar-enable">Load positions</button></div><div class="solar-layout"><div class="solar-stage"><canvas id="solar-canvas" aria-label="Interactive 3D solar-system positions; drag to rotate, scroll to zoom" tabindex="0"></canvas><div class="canvas-caption">DRAG TO ROTATE · SCROLL TO ZOOM · CLICK A BODY · ARROW KEYS TO ROTATE</div></div><aside class="solar-details"><div id="solar-selected"><h3>Select a body</h3><p>Positions are calculated from ephemerides, not an animation of guessed orbital speeds.</p></div><div id="solar-catalog" class="body-catalog"></div></aside></div><div id="solar-note" class="source-note">Body sizes are exaggerated for readability. Compressed distance mode is not to scale. Rings are distance guides, not orbital trajectories.</div><form id="body-search-form"><label>Add another JPL body<input id="body-query" placeholder="Try Halley, Ceres, a moon, or an asteroid" minlength="2" maxlength="80" required></label><button class="quiet">Search JPL</button></form><div id="body-results" class="location-results"></div></div></section>
+<footer><span>GARAGE OBSERVATORY / INDEPENDENT DISPLAY</span><span id="updated">Live sources refresh automatically</span></footer>
+</main></body></html>

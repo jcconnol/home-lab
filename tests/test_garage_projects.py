@@ -57,15 +57,15 @@ def http(url, token, data=None):
 
 def test_terrarium_survives_restart(tmp_path):
     path = tmp_path / "state.json"
-    first = json.loads(cli("garage-dashboard/terrarium", "--state", path, "--ticks", 5, "--seed", 1).stdout)
-    second = json.loads(cli("garage-dashboard/terrarium", "--state", path, "--ticks", 0).stdout)
+    first = json.loads(cli("experiments/terrarium", "--state", path, "--ticks", 5, "--seed", 1).stdout)
+    second = json.loads(cli("experiments/terrarium", "--state", path, "--ticks", 0).stdout)
     assert first == second
-    third = json.loads(cli("garage-dashboard/terrarium", "--state", path, "--ticks", 1).stdout)
+    third = json.loads(cli("experiments/terrarium", "--state", path, "--ticks", 1).stdout)
     assert third["tick"] == 6
 
 
 def test_terrarium_energy_and_population_stay_bounded():
-    module = load("garage-dashboard/terrarium")
+    module = load("experiments/terrarium")
     state = {"tick": 0, "plants": 0, "next_id": 2,
              "creatures": [{"id": 1, "parent": None, "age": 0, "energy": 2}], "events": []}
     for _ in range(500):

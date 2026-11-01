@@ -1,2 +1,1 @@
--r requirements.txt
-playwright>=1.55,<2
+-r phones/fleet-operator/requirements.txt
