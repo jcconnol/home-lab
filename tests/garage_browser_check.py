@@ -96,6 +96,15 @@ def main():
                 desktop.locator('nav a[href="#board"]').click()
                 desktop.reload()
                 expect(desktop.locator("#aircraft-status")).to_contain_text("last good data")
+                desktop.clock.install()
+                desktop.reload()
+                expect(desktop.locator("#board")).to_be_visible()
+                desktop.clock.fast_forward(60000)
+                expect(desktop.locator("#solar")).to_be_visible()
+                desktop.clock.fast_forward(60000)
+                expect(desktop.locator("#board")).to_be_visible()
+                desktop.locator('nav a[href="#solar"]').click()
+                expect(desktop.locator("#solar")).to_be_visible()
                 if args.board_only:
                     browser.close()
                     assert not errors, errors

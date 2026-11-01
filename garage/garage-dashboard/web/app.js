@@ -87,6 +87,7 @@ $("solar-reset").addEventListener("click",()=>solar.reset());
 $("body-search-form").addEventListener("submit",event=>{event.preventDefault();act(async()=>{const result=await api("/api/bodies/search?q="+encodeURIComponent($("body-query").value));bodyResults=result.results;$("body-results").innerHTML=bodyResults.map((body,i)=>`<button data-body="${i}" ${body.tracked?"disabled":""}>${esc(body.name)}<small>JPL ${esc(body.id)} · ${body.tracked?"already in the catalog":"add to hourly positions"}</small></button>`).join("")||'<p>No matching JPL bodies found.</p>';});});
 $("body-results").addEventListener("click",event=>{const button=event.target.closest("[data-body]");if(button)act(async()=>{await api("/api/settings",{add_body:bodyResults[Number(button.dataset.body)]});$("body-results").replaceChildren();});});
 window.addEventListener("hashchange",navigate);
+setInterval(()=>{location.hash=location.hash==="#solar"?"#board":"#solar";},60000);
 function updateClock(){const current=Date.now()/1000;$("clock").textContent=format(current,{hour:"2-digit",minute:"2-digit",second:undefined});$("date").textContent=format(current,{weekday:"long",month:"long",day:"numeric"});document.querySelectorAll("[data-countdown]").forEach(el=>el.textContent=countdown(el.dataset.countdown));}
 setInterval(updateClock,1000);
 fetch("/land.json").then(response=>response.json()).then(paths=>{landPaths=paths;if(state)renderISS();}).catch(()=>{});

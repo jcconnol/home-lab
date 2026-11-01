@@ -18,6 +18,8 @@ On Windows use `garage/runtime/venv/Scripts/python.exe`. Physical Pi performance
 
 ## Features and limits
 
+The display automatically alternates between the local and solar-system tabs every 60 seconds. You can still select either tab manually.
+
 - Current weather, feels-like temperature, wind/gusts, precipitation, hourly outlook, five-day forecast, sunrise/sunset and regional modeled air quality.
 - Nearby airborne aircraft radar with callsign, altitude, speed and distance. Volunteer receiver coverage varies; an empty display does not establish an empty sky.
 - ISS position, observer elevation and upcoming potentially visible passes. Clouds and obstructions can prevent visibility.
