@@ -16,6 +16,26 @@ For a fresh checkout, first clone `https://github.com/jcconnol/home-lab.git` and
 
 On Windows use `garage/runtime/venv/Scripts/python.exe`. Physical Pi performance remains unmeasured; local browser checks cover 1280x720. Your Pi 2 revision may require a supported 32-bit OS.
 
+## Full-screen display at startup (Raspberry Pi)
+
+Use Raspberry Pi OS **with Desktop**, Chromium, and the dashboard dependencies installed above. In `sudo raspi-config`, enable **Desktop Auto Login** under the boot/auto-login options. Disable screen blanking there too if the display should stay on. A graphical desktop must be running; Raspberry Pi OS Lite alone is insufficient. Current Chromium requires a Pi 3 or newer with at least 1 GB RAM; the older Pi 2 mentioned above is not a supported Chromium kiosk target. See the [official Raspberry Pi kiosk guide](https://www.raspberrypi.com/tutorials/how-to-use-a-raspberry-pi-in-kiosk-mode/).
+
+From the repository root, run this one command to launch the dashboard and Chromium full screen:
+
+```sh
+bash "$PWD/garage/garage-dashboard/kiosk.sh"
+```
+
+To launch at every boot, run `crontab -e` as your **normal desktop user**, without sudo, and add this line, replacing the checkout path with your actual absolute path:
+
+```cron
+@reboot /bin/bash /home/YOUR_USER/home-lab/garage/garage-dashboard/kiosk.sh
+```
+
+The launcher works from any directory, waits up to ten minutes for the Wayland or X11 desktop, starts the local server if needed, and waits for it before opening Chromium. It reuses an already running server, including the existing dashboard user service. Duplicate launcher invocations exit without opening another window. Chromium uses a separate profile, preserving the dashboard's normal browser settings. No cloud hosting is required.
+
+Press **Alt+F4** to close the kiosk. Closing it also stops the server if this launcher started it; an existing service remains running. Remove the crontab line to disable startup. Logs are in `garage/garage-dashboard/runtime/kiosk.log` and `runtime/server.log`. Desktop auto-login leaves this local desktop accessible to anyone at the Pi.
+
 ## Features and limits
 
 The display automatically alternates between the local and solar-system tabs every 60 seconds. You can still select either tab manually.
