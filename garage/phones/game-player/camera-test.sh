@@ -18,4 +18,4 @@ printf 'Saving photos in %s\nStop with Ctrl+C.\n' "$output"
 # Keep the camera running between shots. --datetime names JPEGs MMDDhhmmss.jpg;
 # the enclosing session folder supplies the year and separates test runs.
 exec "$camera" --nopreview --timeout 0 --timelapse 1000 --datetime \
-    --width 1280 --height 720 --output photo.jpg
+    --width 1280 --height 720 --output .
